@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Timetable | Master Maths</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--pink:#FF2D78;--dark:#0D0D1A;--dark2:#16162A;--dark3:#1E1E35;--text:#E8E8F5;--muted:#8888AA;--green:#00E5A0;--blue:#4D9EFF;--purple:#9B6DFF;--yellow:#FFD166;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:var(--dark2);border-bottom:1px solid rgba(255,255,255,0.07);position:sticky;top:0;z-index:100;}
+.back-btn{color:var(--muted);text-decoration:none;font-size:0.88rem;font-weight:500;transition:color 0.2s;}
+.back-btn:hover{color:var(--pink);}
+.topbar h2{font-family:'Syne',sans-serif;font-size:1rem;font-weight:800;}
+.container{max-width:860px;margin:0 auto;padding:40px 24px;}
+.wizard-steps{display:flex;align-items:center;gap:0;margin-bottom:48px;}
+.wstep{display:flex;align-items:center;gap:10px;flex:1;}
+.wstep-num{width:32px;height:32px;border-radius:50%;border:2px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:var(--muted);transition:all 0.3s;flex-shrink:0;}
+.wstep.active .wstep-num{border-color:var(--pink);background:var(--pink);color:#fff;}
+.wstep.done .wstep-num{border-color:var(--green);background:var(--green);color:#000;}
+.wstep-label{font-size:0.78rem;color:var(--muted);}
+.wstep.active .wstep-label{color:var(--text);}
+.wstep-line{flex:1;height:2px;background:rgba(255,255,255,0.07);margin:0 8px;}
+.panel{display:none;}
+.panel.active{display:block;animation:fadeUp 0.4s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+.panel-title{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;margin-bottom:8px;}
+.panel-sub{color:var(--muted);font-size:0.92rem;margin-bottom:32px;line-height:1.6;}
+.form-group{margin-bottom:24px;}
+.form-group label{display:block;font-size:0.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;}
+.form-group input,.form-group select{width:100%;background:var(--dark2);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.92rem;outline:none;transition:border-color 0.3s;}
+.form-group input:focus,.form-group select:focus{border-color:var(--pink);}
+.form-group select option{background:var(--dark2);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.chip-group{display:flex;flex-wrap:wrap;gap:10px;}
+.chip{padding:9px 18px;border-radius:50px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.85rem;transition:all 0.2s;}
+.chip.selected{border-color:var(--pink);background:rgba(255,45,120,0.12);color:var(--pink);}
+.chip.weak.selected{border-color:var(--yellow);background:rgba(255,209,102,0.12);color:var(--yellow);}
+.slider-row{display:flex;align-items:center;gap:16px;margin-bottom:8px;}
+input[type=range]{flex:1;accent-color:var(--pink);}
+.slider-val{min-width:40px;text-align:right;font-size:0.85rem;font-weight:600;color:var(--pink);}
+.btn-primary{background:var(--pink);color:#fff;padding:13px 32px;border-radius:50px;font-weight:600;font-size:0.95rem;cursor:pointer;border:none;transition:all 0.3s;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(255,45,120,0.35);}
+.btn-outline{background:transparent;color:var(--muted);padding:13px 24px;border-radius:50px;font-weight:600;font-size:0.95rem;cursor:pointer;border:1px solid rgba(255,255,255,0.12);transition:all 0.2s;margin-right:12px;}
+.btn-outline:hover{border-color:var(--pink);color:var(--pink);}
+.tt-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
+.tt-header h2{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;}
+.week-grid{display:grid;grid-template-columns:80px repeat(7,1fr);gap:2px;margin-bottom:32px;}
+.wg-head{color:var(--muted);font-weight:600;font-size:0.75rem;text-align:center;padding-bottom:12px;}
+.wg-time{color:var(--muted);font-size:0.75rem;display:flex;align-items:center;justify-content:flex-end;padding-right:10px;}
+.wg-slot{border-radius:8px;padding:8px 6px;min-height:52px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:0.72rem;line-height:1.3;}
+.wg-empty{background:rgba(255,255,255,0.03);}
+.slot-pink{background:rgba(255,45,120,0.18);border:1px solid rgba(255,45,120,0.3);color:#FF6FA8;}
+.slot-blue{background:rgba(77,158,255,0.18);border:1px solid rgba(77,158,255,0.3);color:#7EC8FF;}
+.slot-green{background:rgba(0,229,160,0.18);border:1px solid rgba(0,229,160,0.3);color:#00E5A0;}
+.slot-purple{background:rgba(155,109,255,0.18);border:1px solid rgba(155,109,255,0.3);color:#C4A2FF;}
+.slot-yellow{background:rgba(255,209,102,0.18);border:1px solid rgba(255,209,102,0.3);color:#FFD166;}
+.weak-focus{background:rgba(255,209,102,0.06);border:1px solid rgba(255,209,102,0.2);border-radius:16px;padding:20px 24px;margin-bottom:24px;}
+.weak-focus h4{font-family:'Syne',sans-serif;font-weight:700;color:var(--yellow);margin-bottom:12px;font-size:0.95rem;}
+.weak-item{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;font-size:0.88rem;}
+.prog-bar{height:5px;background:rgba(255,255,255,0.07);border-radius:50px;margin-top:4px;overflow:hidden;width:200px;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--yellow),#FF9A3C);border-radius:50px;}
+.loading-box{text-align:center;padding:60px 24px;}
+.spinner{width:48px;height:48px;border:3px solid rgba(255,45,120,0.15);border-top-color:var(--pink);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media(max-width:640px){.grid2{grid-template-columns:1fr;}.week-grid{grid-template-columns:60px repeat(7,1fr);}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back-btn" href="index.html">&larr; Back to Home</a>
+  <h2>Smart Timetable</h2>
+  <div style="width:100px;"></div>
+</div>
+<div class="container">
+  <div class="wizard-steps">
+    <div class="wstep active" id="ws1"><div class="wstep-num">1</div><div class="wstep-label">Your Details</div></div>
+    <div class="wstep-line"></div>
+    <div class="wstep" id="ws2"><div class="wstep-num">2</div><div class="wstep-label">Availability</div></div>
+    <div class="wstep-line"></div>
+    <div class="wstep" id="ws3"><div class="wstep-num">3</div><div class="wstep-label">Weak Topics</div></div>
+    <div class="wstep-line"></div>
+    <div class="wstep" id="ws4"><div class="wstep-num">4</div><div class="wstep-label">Your Timetable</div></div>
+  </div>
+
+  <!-- PANEL 1 -->
+  <div class="panel active" id="panel1">
+    <div class="panel-title">Tell us about yourself</div>
+    <div class="panel-sub">We will use this to build a timetable that fits your exact needs.</div>
+    <div class="grid2">
+      <div class="form-group"><label>Your Name</label><input type="text" id="studentName" placeholder="e.g. Arjun Ramesh"/></div>
+      <div class="form-group"><label>Class</label>
+        <select id="studentClass"><option value="">Select</option><option>Class 9</option><option>Class 10</option><option>Class 11</option><option>Class 12</option></select>
+      </div>
+    </div>
+    <div class="form-group" id="studentSubjectRow" style="display:none;">
+      <label>Subject</label>
+      <select id="studentSubject">
+        <option value="maths">Maths</option>
+        <option value="business-maths">Business Maths</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Exam / Goal</label>
+      <div class="chip-group" id="goalChips">
+        <button class="chip" onclick="toggleChip(this)">Board Exams</button>
+        <button class="chip" onclick="toggleChip(this)">JEE Mains</button>
+        <button class="chip" onclick="toggleChip(this)">JEE Advanced</button>
+        <button class="chip" onclick="toggleChip(this)">NEET</button>
+        <button class="chip" onclick="toggleChip(this)">School Tests</button>
+        <button class="chip" onclick="toggleChip(this)">Competitive Maths</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Weeks until exam</label>
+      <div class="slider-row">
+        <input type="range" min="1" max="24" value="8" id="weeksSlider" oninput="document.getElementById('weeksVal').textContent=this.value"/>
+        <span class="slider-val" id="weeksVal">8</span>
+        <span style="font-size:0.82rem;color:var(--muted);">weeks</span>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="goPanel(2)">Next &rarr;</button>
+  </div>
+
+  <!-- PANEL 2 -->
+  <div class="panel" id="panel2">
+    <div class="panel-title">When are you available?</div>
+    <div class="panel-sub">Select days and study hours that work for you.</div>
+    <div class="form-group">
+      <label>Available Days</label>
+      <div class="chip-group" id="dayChips">
+        <button class="chip selected" onclick="toggleChip(this)">Mon</button>
+        <button class="chip selected" onclick="toggleChip(this)">Tue</button>
+        <button class="chip selected" onclick="toggleChip(this)">Wed</button>
+        <button class="chip selected" onclick="toggleChip(this)">Thu</button>
+        <button class="chip selected" onclick="toggleChip(this)">Fri</button>
+        <button class="chip" onclick="toggleChip(this)">Sat</button>
+        <button class="chip" onclick="toggleChip(this)">Sun</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Preferred Study Time</label>
+      <div class="chip-group" id="timeChips">
+        <button class="chip" onclick="toggleSingle(this,'timeChips')">Early Morning (5-8 AM)</button>
+        <button class="chip selected" onclick="toggleSingle(this,'timeChips')">Morning (8-12 PM)</button>
+        <button class="chip" onclick="toggleSingle(this,'timeChips')">Afternoon (12-4 PM)</button>
+        <button class="chip" onclick="toggleSingle(this,'timeChips')">Evening (4-8 PM)</button>
+        <button class="chip" onclick="toggleSingle(this,'timeChips')">Night (8-11 PM)</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Daily Maths Study Hours</label>
+      <div class="slider-row">
+        <input type="range" min="1" max="6" value="2" id="hoursSlider" oninput="document.getElementById('hoursVal').textContent=this.value"/>
+        <span class="slider-val" id="hoursVal">2</span>
+        <span style="font-size:0.82rem;color:var(--muted);">hrs/day</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Session Length</label>
+      <div class="chip-group" id="sessionChips">
+        <button class="chip" onclick="toggleSingle(this,'sessionChips')">30 min</button>
+        <button class="chip selected" onclick="toggleSingle(this,'sessionChips')">45 min</button>
+        <button class="chip" onclick="toggleSingle(this,'sessionChips')">60 min</button>
+        <button class="chip" onclick="toggleSingle(this,'sessionChips')">90 min</button>
+      </div>
+    </div>
+    <button class="btn-outline" onclick="goPanel(1)">&larr; Back</button>
+    <button class="btn-primary" onclick="goPanel(3)">Next &rarr;</button>
+  </div>
+
+  <!-- PANEL 3 -->
+  <div class="panel" id="panel3">
+    <div class="panel-title">Which topics need more attention?</div>
+    <div class="panel-sub">Select all difficult topics. AI will allocate extra sessions to them.</div>
+    <div class="form-group">
+      <label>Weak / Difficult Topics</label>
+      <div class="chip-group" id="weakChips"></div>
+    </div>
+    <div class="form-group">
+      <label>Overall Maths Confidence</label>
+      <div class="slider-row">
+        <input type="range" min="1" max="5" value="3" id="confSlider" oninput="updateConf(this.value)"/>
+        <span class="slider-val" id="confVal" style="min-width:80px;text-align:left;">Average</span>
+      </div>
+    </div>
+    <button class="btn-outline" onclick="goPanel(2)">&larr; Back</button>
+    <button class="btn-primary" onclick="generateTimetable()">Generate My Timetable</button>
+  </div>
+
+  <!-- PANEL 4 -->
+  <div class="panel" id="panel4"></div>
+</div>
+<script src="api.js"></script>
+<script>
+function toggleChip(el){el.classList.toggle('selected');}
+function toggleSingle(el,gId){document.querySelectorAll('#'+gId+' .chip').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');}
+function updateConf(v){const l=['','Very Low','Low','Average','Good','Excellent'];document.getElementById('confVal').textContent=l[v];}
+function getSelected(gId){return[...document.querySelectorAll('#'+gId+' .chip.selected')].map(c=>c.textContent.trim());}
+const TOPIC_MAP={
+  'Class 9':{maths:['Number Systems','Algebra','Linear Equations','Coordinate Geometry','Triangles','Mensuration','Statistics','Probability']},
+  'Class 10':{maths:['Real Numbers','Polynomials','Quadratic Equations','Arithmetic Progressions','Triangles','Trigonometry','Circles','Statistics','Probability']},
+  'Class 11':{
+    maths:['Sets and Functions','Trigonometric Functions','Complex Numbers','Linear Inequalities','Permutations and Combinations','Straight Lines','Conic Sections','Statistics'],
+    'business-maths':['Matrices and Determinants','Algebra','Analytical Geometry','Trigonometry','Differential Calculus','Applications of Differentiation','Financial Mathematics','Descriptive Statistics and Probability','Correlation and Regression Analysis','Operations Research']
+  },
+  'Class 12':{
+    maths:['Relations and Functions','Matrices','Determinants','Continuity and Differentiability','Applications of Derivatives','Integrals','Probability','Linear Programming'],
+    'business-maths':['Applications of Matrices and Determinants','Integral Calculus I','Integral Calculus II','Differential Equations','Numerical Methods','Random Variable and Mathematical Expectation','Probability Distributions','Sampling Techniques and Statistical Inference','Applied Statistics','Operations Research']
+  }
+};
+function goPanel(n){
+  document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active',i===n-1));
+  document.querySelectorAll('.wstep').forEach((s,i)=>{s.classList.toggle('active',i===n-1);s.classList.toggle('done',i<n-1);});
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const TIMETABLE_PREFS_KEY='ilearn_timetable_preferences';
+
+function getCurrentSubject(){
+  const cls=document.getElementById('studentClass').value;
+  if(cls==='Class 11'||cls==='Class 12') return document.getElementById('studentSubject').value||'maths';
+  return 'maths';
+}
+
+function getTopicsForSelection(){
+  const cls=document.getElementById('studentClass').value||'Class 11';
+  const config=TOPIC_MAP[cls]||TOPIC_MAP['Class 11'];
+  return config[getCurrentSubject()]||config.maths||[];
+}
+
+function renderWeakTopicChoices(selectedTopics){
+  const weakChips=document.getElementById('weakChips');
+  if(!weakChips) return;
+  const selected=Array.isArray(selectedTopics)?selectedTopics:[];
+  weakChips.innerHTML=getTopicsForSelection().map((topic)=>'<button class="chip weak'+(selected.includes(topic)?' selected':'')+'" type="button" onclick="toggleChip(this)">'+topic+'</button>').join('');
+}
+
+function syncSubjectRow(){
+  const cls=document.getElementById('studentClass').value;
+  const row=document.getElementById('studentSubjectRow');
+  const subject=document.getElementById('studentSubject');
+  const needsSubject=cls==='Class 11'||cls==='Class 12';
+  row.style.display=needsSubject?'block':'none';
+  if(!needsSubject) subject.value='maths';
+  renderWeakTopicChoices(getSelected('weakChips'));
+}
+
+function collectTimetablePreferences(){
+  return {
+    name: document.getElementById('studentName').value || 'Student',
+    cls: document.getElementById('studentClass').value || 'Class 11',
+    subject: getCurrentSubject(),
+    goals: getSelected('goalChips'),
+    weeks: document.getElementById('weeksSlider').value,
+    days: getSelected('dayChips'),
+    time: getSelected('timeChips')[0] || 'Evening',
+    hours: document.getElementById('hoursSlider').value,
+    session: getSelected('sessionChips')[0] || '45 min',
+    weakTopics: getSelected('weakChips'),
+    conf: document.getElementById('confVal').textContent
+  };
+}
+
+function saveTimetablePreferences(prefs){
+  localStorage.setItem(TIMETABLE_PREFS_KEY, JSON.stringify(prefs));
+}
+
+function restoreSelectedChips(groupId, values){
+  const selected=Array.isArray(values)?values:[];
+  document.querySelectorAll('#'+groupId+' .chip').forEach((chip)=>{
+    chip.classList.toggle('selected', selected.includes(chip.textContent.trim()));
+  });
+}
+
+function restoreSingleChip(groupId, value){
+  document.querySelectorAll('#'+groupId+' .chip').forEach((chip)=>{
+    chip.classList.toggle('selected', chip.textContent.trim()===value);
+  });
+}
+
+function restoreTimetablePreferences(){
+  try{
+    const prefs=JSON.parse(localStorage.getItem(TIMETABLE_PREFS_KEY) || '{}');
+    if(prefs.name) document.getElementById('studentName').value=prefs.name;
+    if(prefs.cls) document.getElementById('studentClass').value=prefs.cls;
+    if(prefs.subject) document.getElementById('studentSubject').value=prefs.subject;
+    syncSubjectRow();
+    if(prefs.weeks){ document.getElementById('weeksSlider').value=prefs.weeks; document.getElementById('weeksVal').textContent=prefs.weeks; }
+    if(prefs.hours){ document.getElementById('hoursSlider').value=prefs.hours; document.getElementById('hoursVal').textContent=prefs.hours; }
+    if(prefs.conf){
+      const map={ 'Very Low':'1','Low':'2','Average':'3','Good':'4','Excellent':'5' };
+      if(map[prefs.conf]) document.getElementById('confSlider').value=map[prefs.conf];
+      document.getElementById('confVal').textContent=prefs.conf;
+    }
+    restoreSelectedChips('goalChips', prefs.goals);
+    restoreSelectedChips('dayChips', prefs.days);
+    restoreSingleChip('timeChips', prefs.time);
+    restoreSingleChip('sessionChips', prefs.session);
+    renderWeakTopicChoices(prefs.weakTopics);
+  }catch(e){}
+}
+
+function enableTimetableModification(){
+  restoreTimetablePreferences();
+  goPanel(1);
+}
+
+async function generateTimetable(){
+  const prefs=collectTimetablePreferences();
+  const name=prefs.name;
+  const cls=prefs.cls;
+  const goals=prefs.goals;
+  const weeks=prefs.weeks;
+  const days=prefs.days;
+  const time=prefs.time;
+  const hours=prefs.hours;
+  const session=prefs.session;
+  const weakTopics=prefs.weakTopics;
+  const conf=prefs.conf;
+  const subject=prefs.subject;
+  goPanel(4);
+  document.getElementById('panel4').innerHTML='<div class="loading-box"><div class="spinner"></div><p>AI is building your personalised timetable...<br/><span style="font-size:0.8rem;">Analysing weak topics and scheduling extra sessions</span></p></div>';
+  try{
+    const response=await API.generateTimetable({
+      availableDays: days,
+      preferredTime: time,
+      hoursPerDay: hours,
+      sessionLength: session,
+      weakTopics,
+      goal: goals.join(', ') || 'Board Exams',
+      weeksToExam: weeks,
+      confidence: conf,
+      subject
+    });
+    const schedule=response.schedule || {};
+    if (schedule.weeklyPlan && !schedule.week) schedule.week=schedule.weeklyPlan;
+    saveTimetablePreferences(prefs);
+    renderTimetable(response.timetable || { schedule }, name, cls, weakTopics, days);
+  }catch(e){
+    document.getElementById('panel4').innerHTML='<div style="text-align:center;padding:60px;"><p style="color:var(--muted);">Could not generate. Check connection and try again.</p><button class="btn-primary" style="margin-top:24px;" onclick="goPanel(3)">Try Again</button></div>';
+  }
+}
+
+function getSlotKey(day,time,topic){
+  return [day,time,topic].join('||');
+}
+
+async function toggleTimetableSlot(timetableId, day, time, topic, completed){
+  try{
+    await API.markTimetableSlotCompletion({ timetableId, day, time, topic, completed });
+    await loadLatestTimetable();
+  }catch(e){
+    alert(e.message || 'Could not update schedule status.');
+  }
+}
+
+async function loadLatestTimetable(){
+  if(!localStorage.getItem('ilearn_token')) return;
+  try{
+    const data=await API.getLatestTimetable();
+    if(data.timetable){
+      const student=JSON.parse(localStorage.getItem('ilearn_student')||'{}');
+      const clsLabel=student.class ? 'Class '+student.class : (student.cls || 'Class 11');
+      localStorage.setItem('ilearn_student_timetable', JSON.stringify(data));
+      renderTimetable(data.timetable, student.name||'Student', clsLabel, [], DAYS);
+      goPanel(4);
+    }
+  }catch(e){}
+}
+
+function renderTimetable(tt,name,cls,weakTopics,selectedDays){
+  const timetableId=tt.id;
+  const week=(tt.schedule?.week||tt.schedule?.weeklyPlan||tt.week||{});
+  const completionMap=tt.completionMap||{};
+  let gridHTML='<div style="padding:4px;"></div>';
+  DAYS.forEach(d=>gridHTML+='<div class="wg-head">'+d+'</div>');
+  const allTimes=new Set();
+  DAYS.forEach(d=>(week[d]||[]).forEach(s=>{if(s.time)allTimes.add(s.time);}));
+  const times=[...allTimes].sort();
+  times.forEach(time=>{
+    gridHTML+='<div class="wg-time">'+time+'</div>';
+    DAYS.forEach(d=>{
+      const slot=(week[d]||[]).find(s=>s.time===time);
+      if(slot&&slot.topic&&slot.topic!=='Rest Day'){
+        const key=getSlotKey(d,time,slot.topic);
+        const done=!!completionMap[key];
+        const bg=done?'rgba(0,229,160,0.18)':'rgba(255,45,120,0.14)';
+        const border=done?'rgba(0,229,160,0.4)':'rgba(255,45,120,0.28)';
+        const badge=done?'<div style="font-size:0.7rem;color:var(--green);font-weight:700;margin-top:6px;">Completed</div>':'<div style="font-size:0.7rem;color:var(--pink);font-weight:700;margin-top:6px;">Pending</div>';
+        const action=timetableId?'<button onclick="toggleTimetableSlot('+timetableId+',\''+d+'\',\''+time+'\',\''+String(slot.topic).replace(/'/g, "\\'")+'\','+(done?'false':'true')+')" style="margin-top:8px;background:'+(done?'rgba(255,45,120,0.12)':'rgba(0,229,160,0.14)')+';color:'+(done?'var(--pink)':'var(--green)')+';border:1px solid '+(done?'rgba(255,45,120,0.25)':'rgba(0,229,160,0.25)')+';border-radius:999px;padding:5px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;">'+(done?'Mark Pending':'Mark Completed')+'</button>':'';
+        gridHTML+='<div class="wg-slot" style="background:'+bg+';border:1px solid '+border+';text-align:left;padding:12px;"><div style="font-weight:700;">'+slot.topic+'</div><div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">'+(slot.type||'study')+' - '+(slot.duration||'')+'</div>'+badge+action+'</div>';
+      }else{
+        gridHTML+='<div class="wg-slot wg-empty"></div>';
+      }
+    });
+  });
+  let weakHTML='';
+  if(tt.schedule?.weakFocus&&tt.schedule.weakFocus.length){
+    weakHTML='<div class="weak-focus"><h4>Extra Focus Areas</h4>'+tt.schedule.weakFocus.map(w=>'<div class="weak-item"><div><div>'+w.topic+'</div><div class="prog-bar"><div class="prog-fill" style="width:'+Math.min(w.extraSessions*20,100)+'%"></div></div></div><div style="color:var(--yellow);font-size:0.8rem;font-weight:600;">+'+w.extraSessions+' sessions/week</div></div>').join('')+'</div>';
+  }
+  let tipsHTML='';
+  if(tt.schedule?.tips&&tt.schedule.tips.length){
+    tipsHTML='<div style="background:var(--dark2);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;margin-top:24px;"><h4 style="font-family:Syne,sans-serif;font-weight:700;margin-bottom:16px;">AI Tips for You</h4>'+tt.schedule.tips.map(t=>'<div style="display:flex;gap:10px;margin-bottom:10px;font-size:0.88rem;"><span style="color:var(--green);">&#10003;</span><span style="color:var(--muted);">'+t+'</span></div>').join('')+'</div>';
+  }
+  document.getElementById('panel4').innerHTML='<div class="tt-header"><div><h2>Your Personalised Timetable</h2><p style="color:var(--muted);font-size:0.88rem;margin-top:4px;">'+((tt.schedule?.summary)||('Custom schedule for '+name+' - '+cls))+'</p></div><button class="btn-outline" onclick="enableTimetableModification()" style="font-size:0.82rem;padding:8px 18px;">Modify Timetable</button></div>'+weakHTML+'<div style="overflow-x:auto;"><div class="week-grid" style="min-width:760px;">'+gridHTML+'</div></div>'+tipsHTML+'<div style="text-align:center;margin-top:32px;"><button class="btn-primary" onclick="window.print()">Download / Print Timetable</button></div>';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const studentClass=document.getElementById('studentClass');
+  const studentSubject=document.getElementById('studentSubject');
+  studentClass.addEventListener('change', syncSubjectRow);
+  studentSubject.addEventListener('change', () => renderWeakTopicChoices(getSelected('weakChips')));
+  const storedStudent=JSON.parse(localStorage.getItem('ilearn_student') || '{}');
+  if(storedStudent.name) document.getElementById('studentName').value=storedStudent.name;
+  if(storedStudent.class) studentClass.value='Class '+storedStudent.class;
+  if(storedStudent.subject) studentSubject.value=storedStudent.subject;
+  restoreTimetablePreferences();
+  syncSubjectRow();
+  await loadLatestTimetable();
+});
+</script>
+</body>
+</html>
+
+
+

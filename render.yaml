@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: i-learn-academy
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: i-learn-academy-db
+          property: connectionString
+
+databases:
+  - name: i-learn-academy-db
+    plan: free

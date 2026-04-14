@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Weak Topic Detection — I LEARN Academy</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--pink:#FF2D78;--dark:#0D0D1A;--dark2:#16162A;--dark3:#1E1E35;--text:#E8E8F5;--muted:#8888AA;--green:#00E5A0;--blue:#4D9EFF;--purple:#9B6DFF;--yellow:#FFD166;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:var(--dark2);border-bottom:1px solid rgba(255,255,255,0.07);}
+.back-btn{color:var(--muted);text-decoration:none;font-size:0.88rem;font-weight:500;transition:color 0.2s;}
+.back-btn:hover{color:var(--pink);}
+.topbar h2{font-family:'Syne',sans-serif;font-size:1rem;font-weight:800;}
+.container{max-width:820px;margin:0 auto;padding:40px 24px;}
+h1{font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;margin-bottom:8px;}
+.sub{color:var(--muted);font-size:0.92rem;margin-bottom:36px;line-height:1.6;}
+.progress-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:0.82rem;color:var(--muted);}
+.prog-bar{height:4px;background:rgba(255,255,255,0.07);border-radius:50px;margin-bottom:32px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--purple));border-radius:50px;transition:width 0.5s ease;}
+.test-card{background:var(--dark2);border:1px solid rgba(255,255,255,0.07);border-radius:20px;padding:32px;margin-bottom:24px;}
+.test-card h3{font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:6px;}
+.test-card p{color:var(--muted);font-size:0.88rem;margin-bottom:24px;}
+.q-block{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.q-block:last-child{border:none;margin-bottom:0;padding-bottom:0;}
+.q-text{font-size:0.92rem;margin-bottom:12px;line-height:1.6;}
+.q-options{display:flex;flex-direction:column;gap:8px;}
+.q-opt{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--dark3);border:1px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;transition:all 0.2s;font-size:0.88rem;}
+.q-opt:hover{border-color:var(--pink);background:rgba(255,45,120,0.06);}
+.q-opt.selected{border-color:var(--blue);background:rgba(77,158,255,0.08);}
+.q-opt.correct{border-color:var(--green);background:rgba(0,229,160,0.08);color:var(--green);}
+.q-opt.wrong{border-color:var(--pink);background:rgba(255,45,120,0.08);color:var(--pink);}
+.opt-dot{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;transition:all 0.2s;}
+.q-opt.selected .opt-dot{background:var(--blue);border-color:var(--blue);}
+.q-opt.correct .opt-dot{background:var(--green);border-color:var(--green);}
+.q-opt.wrong .opt-dot{background:var(--pink);border-color:var(--pink);}
+.result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;}
+.r-card{background:var(--dark2);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px;text-align:center;}
+.r-card .r-num{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;margin-bottom:4px;}
+.r-card .r-label{font-size:0.78rem;color:var(--muted);}
+.topic-result{background:var(--dark2);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;margin-bottom:16px;}
+.topic-result h4{font-family:'Syne',sans-serif;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.tag{font-size:0.7rem;padding:3px 10px;border-radius:50px;font-weight:700;}
+.tag.weak{background:rgba(255,45,120,0.12);color:var(--pink);}
+.tag.ok{background:rgba(0,229,160,0.12);color:var(--green);}
+.tag.avg{background:rgba(255,209,102,0.12);color:var(--yellow);}
+.topic-bar{height:8px;background:rgba(255,255,255,0.07);border-radius:50px;margin:8px 0;overflow:hidden;}
+.topic-bar-fill{height:100%;border-radius:50px;}
+.exercises{margin-top:16px;display:flex;flex-direction:column;gap:8px;}
+.ex-item{display:flex;align-items:flex-start;gap:10px;font-size:0.85rem;color:var(--muted);padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:8px;}
+.ex-arrow{color:var(--pink);flex-shrink:0;}
+.btn-primary{background:var(--pink);color:#fff;padding:12px 28px;border-radius:50px;font-weight:600;font-size:0.92rem;cursor:pointer;border:none;transition:all 0.3s;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(255,45,120,0.35);}
+.btn-outline{background:transparent;color:var(--muted);padding:12px 24px;border-radius:50px;font-weight:600;font-size:0.92rem;cursor:pointer;border:1px solid rgba(255,255,255,0.12);transition:all 0.2s;margin-right:12px;}
+.btn-outline:hover{border-color:var(--pink);color:var(--pink);}
+.loading-box{text-align:center;padding:60px 24px;}
+.spinner{width:48px;height:48px;border:3px solid rgba(255,45,120,0.15);border-top-color:var(--pink);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeUp 0.4s ease;}
+@media(max-width:600px){.result-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back-btn" href="index.html">&larr; Back to Home</a>
+  <h2>Weak Topic Detection</h2>
+  <div style="width:80px;"></div>
+</div>
+<div class="container">
+  <div id="mainContent"></div>
+</div>
+<script src="api.js"></script>
+<script>
+const topics = {
+  'Algebra': [
+    {q:'Solve: 2x&sup2; - 5x + 3 = 0', opts:['x = 1, x = 3/2','x = -1, x = 3/2','x = 1, x = -3/2','x = 2, x = 3'], ans:0},
+    {q:'If A = {1,2,3} and B = {2,3,4}, what is A &cap; B?', opts:['{1,2,3,4}','{2,3}','{1,4}','{1,2,3}'], ans:1}
+  ],
+  'Trigonometry': [
+    {q:'What is the value of sin(30&deg;) + cos(60&deg;)?', opts:['0','1','1/2','&radic;3/2'], ans:1},
+    {q:'tan(45&deg;) = ?', opts:['0','&radic;3','1','1/&radic;3'], ans:2}
+  ],
+  'Calculus': [
+    {q:'d/dx (x&sup3;) = ?', opts:['x&sup2;','3x','3x&sup2;','x&sup3;'], ans:2},
+    {q:'&int; 2x dx = ?', opts:['x&sup2; + C','2x&sup2; + C','x + C','2 + C'], ans:0}
+  ],
+  'Statistics': [
+    {q:'Mean of 4, 8, 12, 16, 20 is:', opts:['10','12','14','16'], ans:1},
+    {q:'Variance measures:', opts:['Central value','Spread of data','Frequency','Mode'], ans:1}
+  ],
+  'Probability': [
+    {q:'P(A)=0.4, P(B)=0.5, P(A&cap;B)=0.2. Find P(A&cup;B).', opts:['0.7','0.6','0.9','0.3'], ans:0},
+    {q:'A die is rolled. P(even number) = ?', opts:['1/3','1/2','1/6','2/3'], ans:1}
+  ]
+};
+
+let allQuestions = [];
+let answers = {};
+
+function buildQuiz() {
+  allQuestions = [];
+  answers = {};
+  Object.entries(topics).forEach(([topic, qs]) => {
+    qs.forEach((q, i) => allQuestions.push({...q, topic, id: topic + '_' + i}));
+  });
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const total = allQuestions.length;
+  const answered = Object.keys(answers).length;
+  const pct = Math.round(answered / total * 100);
+  let html = '<h1>Quick Diagnostic Test</h1>';
+  html += '<p class="sub">Answer all ' + total + ' questions honestly. AI will identify your weak topics and suggest targeted exercises.</p>';
+  html += '<div class="progress-top"><span>' + answered + ' of ' + total + ' answered</span><span id="pct">' + pct + '%</span></div>';
+  html += '<div class="prog-bar"><div class="prog-fill" id="progFill" style="width:' + pct + '%"></div></div>';
+
+  const byTopic = {};
+  allQuestions.forEach(q => { if (!byTopic[q.topic]) byTopic[q.topic] = []; byTopic[q.topic].push(q); });
+
+  Object.entries(byTopic).forEach(([topic, qs]) => {
+    html += '<div class="test-card"><h3>' + topic + '</h3><p>Answer the questions below.</p>';
+    qs.forEach(q => {
+      const sel = answers[q.id];
+      html += '<div class="q-block"><div class="q-text">' + q.q + '</div><div class="q-options">';
+      q.opts.forEach((opt, i) => {
+        const isSel = sel === i;
+        html += '<div class="q-opt' + (isSel ? ' selected' : '') + '" onclick="selectAns(\'' + q.id + '\',' + i + ',this)"><div class="opt-dot"></div>' + opt + '</div>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+  });
+
+  const allAnswered = answered === total;
+  html += '<div style="text-align:center;margin-top:8px;">';
+  if (allAnswered) {
+    html += '<button class="btn-primary" onclick="submitTest()">Analyse My Results</button>';
+  } else {
+    html += '<button class="btn-primary" style="opacity:0.5;cursor:not-allowed;">Answer all ' + (total - answered) + ' remaining questions</button>';
+  }
+  html += '</div>';
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+function selectAns(id, idx, el) {
+  answers[id] = idx;
+  el.closest('.q-options').querySelectorAll('.q-opt').forEach((o, i) => {
+    o.classList.toggle('selected', i === idx);
+  });
+  const answered = Object.keys(answers).length;
+  const total = allQuestions.length;
+  const pct = Math.round(answered / total * 100);
+  const pf = document.getElementById('progFill');
+  const pp = document.getElementById('pct');
+  if (pf) pf.style.width = pct + '%';
+  if (pp) pp.textContent = pct + '%';
+  if (answered === total) renderQuiz();
+}
+
+async function submitTest() {
+  const total = allQuestions.length;
+  if (Object.keys(answers).length < total) return;
+  const topicScores = {};
+  allQuestions.forEach(q => {
+    if (!topicScores[q.topic]) topicScores[q.topic] = {correct: 0, total: 0};
+    topicScores[q.topic].total++;
+    if (answers[q.id] === q.ans) topicScores[q.topic].correct++;
+  });
+  const correct = allQuestions.filter(q => answers[q.id] === q.ans).length;
+  document.getElementById('mainContent').innerHTML = '<div class="loading-box"><div class="spinner"></div><p>AI is analysing your results...</p></div>';
+  const scoreStr = Object.entries(topicScores).map(([t, s]) => t + ': ' + s.correct + '/' + s.total).join(', ');
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{role: 'user', content: 'A student completed a Maths diagnostic test. Scores by topic: ' + scoreStr + '. Total: ' + correct + '/' + total + '.\n\nReturn ONLY JSON (no markdown):\n{\n  "overall": "one encouraging sentence",\n  "topics": [\n    {\n      "topic": "Topic Name",\n      "score": 50,\n      "status": "weak|average|good",\n      "advice": "one specific actionable tip",\n      "exercises": ["exercise 1", "exercise 2", "exercise 3"]\n    }\n  ]\n}\nstatus rules: score below 50 = weak, 50 to 80 = average, above 80 = good.'}]
+      })
+    });
+    const data = await res.json();
+    let raw = (data.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim();
+    renderResults(JSON.parse(raw), correct, total, topicScores);
+  } catch(e) {
+    renderResultsFallback(correct, total, topicScores);
+  }
+}
+
+function renderResults(result, correct, total, topicScores) {
+  const pct = Math.round(correct / total * 100);
+  const col = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--pink)';
+  let html = '<div class="fade-in">';
+  html += '<h1>Your Analysis Report</h1>';
+  html += '<p class="sub">' + (result.overall || 'Great effort! Here is your detailed breakdown.') + '</p>';
+  html += '<div class="result-grid">';
+  html += '<div class="r-card"><div class="r-num" style="color:' + col + '">' + pct + '%</div><div class="r-label">Overall Score</div></div>';
+  html += '<div class="r-card"><div class="r-num" style="color:var(--green)">' + correct + '</div><div class="r-label">Correct Answers</div></div>';
+  html += '<div class="r-card"><div class="r-num" style="color:var(--pink)">' + (total - correct) + '</div><div class="r-label">Need Improvement</div></div>';
+  html += '</div>';
+  (result.topics || []).forEach(t => {
+    const s = t.score || 0;
+    const barCol = s >= 75 ? 'var(--green)' : s >= 50 ? 'var(--yellow)' : 'var(--pink)';
+    const statusTag = t.status === 'weak' ? '<span class="tag weak">Needs Focus</span>' : t.status === 'good' ? '<span class="tag ok">Strong</span>' : '<span class="tag avg">Developing</span>';
+    html += '<div class="topic-result">';
+    html += '<h4>' + t.topic + ' ' + statusTag + '</h4>';
+    html += '<div style="font-size:0.82rem;color:var(--muted);margin-bottom:6px;">Score: ' + s + '%</div>';
+    html += '<div class="topic-bar"><div class="topic-bar-fill" style="width:' + s + '%;background:' + barCol + '"></div></div>';
+    html += '<div style="font-size:0.85rem;color:var(--text);margin-top:10px;">' + (t.advice || '') + '</div>';
+    if (t.status === 'weak' && t.exercises && t.exercises.length) {
+      html += '<div class="exercises">';
+      t.exercises.forEach(e => { html += '<div class="ex-item"><span class="ex-arrow">&rarr;</span>' + e + '</div>'; });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '<div style="text-align:center;margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">';
+  html += '<button class="btn-outline" onclick="buildQuiz()">Retake Test</button>';
+  html += '<button class="btn-primary" onclick="window.location.href=\'ai-timetable.html\'">Build My Study Plan &rarr;</button>';
+  html += '</div></div>';
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+function renderResultsFallback(correct, total, topicScores) {
+  const pct = Math.round(correct / total * 100);
+  let html = '<div class="fade-in"><h1>Your Results</h1>';
+  html += '<div class="result-grid">';
+  html += '<div class="r-card"><div class="r-num" style="color:var(--green)">' + pct + '%</div><div class="r-label">Score</div></div>';
+  html += '<div class="r-card"><div class="r-num">' + correct + '</div><div class="r-label">Correct</div></div>';
+  html += '<div class="r-card"><div class="r-num" style="color:var(--pink)">' + (total - correct) + '</div><div class="r-label">Incorrect</div></div>';
+  html += '</div>';
+  Object.entries(topicScores).forEach(([t, s]) => {
+    const p = Math.round(s.correct / s.total * 100);
+    const c = p >= 75 ? 'var(--green)' : p >= 50 ? 'var(--yellow)' : 'var(--pink)';
+    html += '<div class="topic-result"><h4>' + t + '</h4><div class="topic-bar"><div class="topic-bar-fill" style="width:' + p + '%;background:' + c + '"></div></div><div style="font-size:0.82rem;color:var(--muted);margin-top:6px;">' + s.correct + '/' + s.total + ' correct</div></div>';
+  });
+  html += '<button class="btn-primary" style="margin-top:16px;" onclick="buildQuiz()">Retake Test</button></div>';
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+buildQuiz();
+</script>
+</body>
+</html>
