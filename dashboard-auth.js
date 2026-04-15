@@ -240,6 +240,9 @@ async function setupParentDashboard() {
           { label: 'Role', value: 'Parent' },
           { label: 'Student', value: student.name },
           { label: 'Class', value: 'Class ' + student.class },
+          { label: 'Email', value: student.email || 'Not available' },
+          { label: 'Subject', value: student.subject || 'Maths' },
+          { label: 'Board', value: student.board || 'Not available' },
           { label: 'Mobile', value: student.mobile || 'Not available' },
           { label: 'Attendance', value: formatAttendanceLabel(monthAtt.present, monthAtt.total) }
         ],
