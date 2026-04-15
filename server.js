@@ -74,6 +74,13 @@ function refreshSheets() {
   exportProfileSheets();
   exportAttendanceSheet();
 }
+function getCurrentMonthPrefix() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit'
+  }).format(new Date());
+}
 function buildAttendanceSummary(studentId, monthPrefix = '') {
   const pattern = monthPrefix ? monthPrefix + '%' : '%';
   const present = db.prepare("SELECT COUNT(*) AS count FROM attendance WHERE student_id=? AND date LIKE ? AND status='present'").get(studentId, pattern).count;
@@ -95,10 +102,9 @@ function buildWeeklyStudentSummary(studentId) {
   `).get(studentId);
   const mcq = db.prepare(`
     SELECT SUM(CASE WHEN s.is_correct=1 THEN 1 ELSE 0 END) AS correct,
-           COUNT(s.id) AS attempted, COUNT(m.id) AS available
-    FROM daily_mcqs m
-    LEFT JOIN daily_mcq_submissions s ON s.mcq_id = m.id AND s.student_id=?
-    WHERE m.active=1 AND m.created_at >= (CURRENT_TIMESTAMP - INTERVAL '6 days')
+           COUNT(s.id) AS attempted
+    FROM daily_mcq_submissions s
+    WHERE s.student_id=? AND s.submitted_at >= (CURRENT_TIMESTAMP - INTERVAL '6 days')
   `).get(studentId);
   const present      = Number(attendance?.present)  || 0;
   const totalA       = Number(attendance?.total)    || 0;
@@ -106,11 +112,10 @@ function buildWeeklyStudentSummary(studentId) {
   const totalT       = Number(timetable?.total)     || 0;
   const correct      = Number(mcq?.correct)         || 0;
   const attempted    = Number(mcq?.attempted)       || 0;
-  const available    = Number(mcq?.available)       || 0;
   return {
     attendance: { present, total: totalA,    percentage: totalA    ? Math.round((present   / totalA)    * 1000) / 10 : 0 },
     timetable:  { completed, total: totalT,  percentage: totalT    ? Math.round((completed / totalT)    * 1000) / 10 : 0 },
-    mcq:        { correct, attempted, available, percentage: attempted ? Math.round((correct / attempted) * 1000) / 10 : 0 }
+    mcq:        { correct, attempted, percentage: attempted ? Math.round((correct / attempted) * 1000) / 10 : 0 }
   };
 }
 function buildTimetableCompletionMap(timetableId, studentId) {
@@ -171,6 +176,17 @@ function getStudentActiveMcqSet(studentId, studentClass) {
     ORDER BY m.question_no ASC, m.created_at ASC
   `).all(studentId, latestBatch.batch_title, safeClass).map((mcq) => ({ ...mcq, options: JSON.parse(mcq.options || '[]') }));
   return { batchTitle: latestBatch.batch_title, availableUntil: latestBatch.available_until, questions };
+}
+function getRecentStudentMcqs(studentId, limit = 10) {
+  return db.prepare(`
+    SELECT m.id, m.title, m.batch_title, m.question_no, m.question,
+           s.selected_index, s.is_correct, s.submitted_at
+    FROM daily_mcq_submissions s
+    JOIN daily_mcqs m ON m.id = s.mcq_id
+    WHERE s.student_id=?
+    ORDER BY s.submitted_at DESC, m.question_no ASC
+    LIMIT ?
+  `).all(studentId, limit);
 }
 function seedDefaultTeacher() {
   try {
@@ -587,9 +603,21 @@ db.exec(`
   "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_image  TEXT",
 ].forEach((sql) => { try { db.prepare(sql).run(); } catch (e) { /* already exists — ignore */ } });
 
-// Partial unique indexes for nullable google_sub
-try { db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub) WHERE google_sub IS NOT NULL').run(); } catch (e) { /* ignore */ }
-try { db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub) WHERE google_sub IS NOT NULL').run(); } catch (e) { /* ignore */ }
+// PostgreSQL already treats NULLs as distinct in unique indexes.
+try {
+  db.prepare(
+    USING_POSTGRES
+      ? 'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub)'
+      : 'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub) WHERE google_sub IS NOT NULL'
+  ).run();
+} catch (e) { /* ignore */ }
+try {
+  db.prepare(
+    USING_POSTGRES
+      ? 'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub)'
+      : 'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub) WHERE google_sub IS NOT NULL'
+  ).run();
+} catch (e) { /* ignore */ }
 
 seedDefaultTeacher();
 refreshSheets();
@@ -763,7 +791,7 @@ app.get('/api/student/profile', authStudent, (req, res) => {
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const latestAssessment = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1').get(studentId);
   const latestTimetable  = db.prepare('SELECT * FROM timetables WHERE student_id=? ORDER BY created_at DESC LIMIT 1').get(studentId);
-  const thisMonth        = new Date().toISOString().slice(0, 7);
+  const thisMonth        = getCurrentMonthPrefix();
   const monthAttendance  = buildAttendanceSummary(studentId, thisMonth);
   const overallAttendance= buildAttendanceSummary(studentId);
   const dailyMcqSet      = getStudentActiveMcqSet(studentId, student.class);
@@ -877,7 +905,7 @@ app.get('/api/parent/report', authParent, (req, res) => {
   const assessments      = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 5').all(studentId);
   const latestAssessment = assessments[0] || null;
   const latestTimetable  = db.prepare('SELECT * FROM timetables WHERE student_id=? ORDER BY created_at DESC LIMIT 1').get(studentId) || null;
-  const thisMonth        = new Date().toISOString().slice(0, 7);
+  const thisMonth        = getCurrentMonthPrefix();
   const monthAttendance  = buildAttendanceSummary(studentId, thisMonth);
   const overallAttendance= buildAttendanceSummary(studentId);
   const dailyMcqSet      = getStudentActiveMcqSet(studentId, student.class);
@@ -889,7 +917,7 @@ app.get('/api/parent/report', authParent, (req, res) => {
   const topicScores  = latestAssessment ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
   const weakTopics   = latestAssessment ? JSON.parse(latestAssessment.weak_topics   || '[]') : [];
   const strongTopics = latestAssessment ? JSON.parse(latestAssessment.strong_topics || '[]') : [];
-  const recentMcqs   = (dailyMcqSet.questions || []).filter((item) => item.selected_index !== null && item.selected_index !== undefined);
+  const recentMcqs   = getRecentStudentMcqs(studentId);
   const payload = {
     student, latestAssessment, latestTimetable, assessmentHistory: assessments,
     latestScore: Number(latestAssessment?.score) || 0,
@@ -909,7 +937,7 @@ app.post('/api/parent/ai-report', authParent, async (req, res) => {
   const student    = db.prepare('SELECT name, class FROM students WHERE id=?').get(studentId);
   const latest     = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1').get(studentId);
   const prev       = db.prepare('SELECT score, total FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1 OFFSET 1').get(studentId);
-  const thisMonth  = new Date().toISOString().slice(0, 7);
+  const thisMonth  = getCurrentMonthPrefix();
   const present    = db.prepare("SELECT COUNT(*) as n FROM attendance WHERE student_id=? AND date LIKE ? AND status='present'").get(studentId, thisMonth + '%');
   const totalDays  = db.prepare('SELECT COUNT(*) as n FROM attendance WHERE student_id=? AND date LIKE ?').get(studentId, thisMonth + '%');
   const score      = latest ? Math.round(latest.score / latest.total * 100) : 0;
