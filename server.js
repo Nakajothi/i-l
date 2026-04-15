@@ -623,13 +623,15 @@ function authParent(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     if (decoded.role !== 'parent') return res.status(403).json({ error: 'Not a parent account' });
-    if (decoded.studentId) {
-      const student = db.prepare('SELECT id, approval_status FROM students WHERE id=?').get(decoded.studentId);
+    const studentId = decoded.studentId || null;
+    if (studentId) {
+      const student = db.prepare('SELECT id, approval_status FROM students WHERE id=?').get(studentId);
       if (!student) return res.status(401).json({ error: 'Student account not found. Please login again.' });
       if (String(student.approval_status || 'accepted').toLowerCase() === 'rejected')
         return res.status(403).json({ error: 'This account has been blocked by the teacher. Please contact the academy.' });
     }
-    req.parent = decoded;
+
+    req.parent = { ...decoded, studentId };
     next();
   } catch { res.status(401).json({ error: 'Session expired. Please login again.' }); }
 }
@@ -782,6 +784,7 @@ app.get('/api/student/profile', authStudent, (req, res) => {
 //  PARENT ROUTES
 // ============================================================
 app.post('/api/parent/send-otp', otpLimiter, async (req, res) => {
+  return res.status(410).json({ error: 'Parent OTP login has been removed. Please use Google login with the linked student Gmail.' });
   const { mobile } = req.body;
   if (!mobile) return res.status(400).json({ error: 'Mobile number required' });
   const digits  = mobile.replace(/\D/g, '').slice(-10);
@@ -812,6 +815,7 @@ app.post('/api/parent/send-otp', otpLimiter, async (req, res) => {
 });
 
 app.post('/api/parent/verify-otp', (req, res) => {
+  return res.status(410).json({ error: 'Parent OTP login has been removed. Please use Google login with the linked student Gmail.' });
   const { mobile, otp } = req.body;
   if (!mobile || !otp) return res.status(400).json({ error: 'Mobile and OTP required' });
   const digits = mobile.replace(/\D/g, '').slice(-10);
@@ -837,13 +841,27 @@ app.post('/api/parent/google-login', async (req, res) => {
     const googleSub = payload?.sub;
     const email     = payload?.email?.toLowerCase().trim();
     if (!googleSub || !email || !payload?.email_verified) return res.status(401).json({ error: 'Google account could not be verified.' });
-    let student = db.prepare('SELECT id, name, email, class, mobile, board, google_sub, approval_status FROM students WHERE google_sub=? OR email=? LIMIT 1').get(googleSub, email);
+    let student = db.prepare('SELECT id, name, email, class, subject, mobile, board, google_sub, approval_status, created_at FROM students WHERE google_sub=? OR email=? LIMIT 1').get(googleSub, email);
     if (!student) return res.status(401).json({ error: 'This Google account is not linked to any registered student. Please use the same Gmail as the student account.' });
     if (String(student.approval_status || 'accepted').toLowerCase() === 'rejected')
       return res.status(403).json({ error: 'This account has been blocked by the teacher. Please contact the academy.' });
     if (!student.google_sub) { db.prepare('UPDATE students SET google_sub=? WHERE id=?').run(googleSub, student.id); }
     const token = jwt.sign({ role: 'parent', studentId: student.id, email: student.email, googleSub }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, token, student: { id: student.id, name: student.name, email: student.email, class: student.class, mobile: student.mobile, board: student.board } });
+    res.json({
+      success: true,
+      token,
+      student: {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        class: student.class,
+        subject: normalizeStudentSubject(student.subject, student.class),
+        mobile: student.mobile,
+        board: student.board,
+        approvalStatus: String(student.approval_status || 'accepted').toLowerCase(),
+        createdAt: student.created_at
+      }
+    });
   } catch (err) {
     console.error('Parent Google login error:', err.message);
     res.status(401).json({ error: 'Parent Google sign-in failed. Please try again.' });
@@ -854,7 +872,7 @@ app.get('/api/parent/report', authParent, (req, res) => {
   try { syncAttendanceFromSheet(); } catch (e) { /* ignore */ }
   const { studentId } = req.parent;
   if (!studentId) return res.status(404).json({ error: 'No student linked to this parent account' });
-  const student = db.prepare('SELECT id, name, class, mobile FROM students WHERE id=?').get(studentId);
+  const student = db.prepare('SELECT id, name, email, class, subject, mobile, board, approval_status, created_at FROM students WHERE id=?').get(studentId);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const assessments      = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 5').all(studentId);
   const latestAssessment = assessments[0] || null;
@@ -1460,8 +1478,7 @@ Routes ready:
   POST /api/student/register
   POST /api/student/login
   GET  /api/student/profile
-  POST /api/parent/send-otp
-  POST /api/parent/verify-otp
+  POST /api/parent/google-login
   GET  /api/parent/report
   POST /api/assessment/submit
   GET  /api/assessment/history
@@ -1481,6 +1498,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
