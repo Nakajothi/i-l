@@ -661,16 +661,6 @@ section{padding:56px 14px;}
   </div>
 
   <div class="dash-widget">
-    <h4>&#128202; Quick Summary</h4>
-    <div class="metric-row"><span class="metric-label">Attendance</span><span class="metric-value up" id="parentSummaryAttendance">0%</span></div>
-    <div class="dash-updated" id="parentSummaryAttendanceUpdated">--</div>
-    <div class="metric-row" style="margin-top:10px;"><span class="metric-label">MCQ Score</span><span class="metric-value" id="parentSummaryMcq">No MCQ yet</span></div>
-    <div class="dash-updated" id="parentSummaryMcqUpdated">--</div>
-    <div class="metric-row" style="margin-top:10px;"><span class="metric-label">Fee Pending</span><span class="metric-value" id="parentSummaryFee">Rs 0</span></div>
-    <div class="dash-updated" id="parentSummaryFeeUpdated">--</div>
-  </div>
-
-  <div class="dash-widget">
     <h4>&#128200; Topic Performance</h4>
     <div id="parentTopicProgress">
       <div style="color:var(--muted);font-size:0.88rem;">Login as parent to see topic-wise scores from the latest assessment.</div>
@@ -1100,6 +1090,7 @@ section{padding:56px 14px;}
   </div>
 </div>
 <script src="api.js"></script>
+<script src="dashboard-auth.js"></script>
 <script src="main.js"></script>
 <div class="modal-overlay" id="doubtModal" onclick="if(event.target===this)closeDoubtModal()">
   <div class="modal">
