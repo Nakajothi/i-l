@@ -88,17 +88,6 @@ const API = {
   },
 
   // ── PARENT ───────────────────────────────────────────
-  async sendParentOTP(mobile)          { return this.post('/parent/send-otp', { mobile }); },
-
-  async verifyParentOTP(mobile, otp) {
-    const data = await this.post('/parent/verify-otp', { mobile, otp });
-    localStorage.setItem('ilearn_parent_token', data.token);
-    localStorage.setItem('ilearn_parent_student', JSON.stringify(data.student));
-    localStorage.removeItem('ilearn_token');
-    localStorage.removeItem('ilearn_teacher_token');
-    return data;
-  },
-
   async loginParentWithGoogle(credential) {
     const data = await this.post('/parent/google-login', { credential });
     localStorage.setItem('ilearn_parent_token', data.token);
@@ -224,7 +213,6 @@ const API = {
     console.warn('[I LEARN API] Backend not reachable:', e.message);
   }
 })();
-
 
 
 
