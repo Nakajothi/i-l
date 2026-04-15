@@ -47,12 +47,15 @@ function toggleMenu() {
 // ── 4. DASHBOARD TABS ─────────────────────────────────────────────────────────
 function switchTab(tab, el) {
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.dash-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.dash-content').forEach(c => {
+    c.classList.remove('active');
+    c.style.display = 'none';
+  });
   el.classList.add('active');
   const tabEl = document.getElementById('tab-' + tab);
   if (tabEl) {
     tabEl.classList.add('active');
-    tabEl.style.display = tab === 'teacher' ? 'block' : '';
+    tabEl.style.display = 'grid';
   }
 
   if (tab === 'teacher' && hasActiveTeacherSession()) {
@@ -853,16 +856,21 @@ function updateHomeForSession() {
 
   if (role === 'student') {
     studentTab?.classList.add('active'); parentTab?.classList.remove('active'); teacherTab?.classList.remove('active');
-    studentContent?.classList.add('active'); parentContent?.classList.remove('active'); teacherContent?.classList.remove('active');
+    if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
+    if (parentContent) { parentContent.classList.remove('active'); parentContent.style.display = 'none'; }
+    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
   } else if (role === 'parent') {
     parentTab?.classList.add('active'); studentTab?.classList.remove('active'); teacherTab?.classList.remove('active');
-    parentContent?.classList.add('active'); studentContent?.classList.remove('active'); teacherContent?.classList.remove('active');
+    if (parentContent) { parentContent.classList.add('active'); parentContent.style.display = 'grid'; }
+    if (studentContent) { studentContent.classList.remove('active'); studentContent.style.display = 'none'; }
+    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
     // Ensure parent extra widgets exist
     if (typeof ensureParentExtraWidgets === 'function') ensureParentExtraWidgets();
   } else if (role === 'teacher') {
     teacherTab?.classList.add('active'); studentTab?.classList.remove('active'); parentTab?.classList.remove('active');
-    if (teacherContent) { teacherContent.classList.add('active'); teacherContent.style.display = 'block'; }
-    studentContent?.classList.remove('active'); parentContent?.classList.remove('active');
+    if (teacherContent) { teacherContent.classList.add('active'); teacherContent.style.display = 'grid'; }
+    if (studentContent) { studentContent.classList.remove('active'); studentContent.style.display = 'none'; }
+    if (parentContent) { parentContent.classList.remove('active'); parentContent.style.display = 'none'; }
   }
 
   renderNavProfile();
@@ -1419,7 +1427,6 @@ window.addEventListener('load', async () => {
     updateHomeForSession();
   }
 });
-
 
 
 
