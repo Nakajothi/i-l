@@ -326,7 +326,7 @@ function ensureParentExtraWidgets() {
   if (!parentTab) return;
 
   // Weekly tests widget
-  if (!document.getElementById('parentWeeklyTestsWidget')) {
+  if (!document.getElementById('parentWeeklyTestsWidget') && !document.getElementById('parentWeeklyTests')) {
     const weekly = document.createElement('div');
     weekly.className = 'dash-widget';
     weekly.id = 'parentWeeklyTestsWidget';
@@ -339,7 +339,7 @@ function ensureParentExtraWidgets() {
   }
 
   // MCQ performance widget
-  if (!document.getElementById('parentMcqWidget')) {
+  if (!document.getElementById('parentMcqWidget') && !document.getElementById('parentMcqList')) {
     const mcq = document.createElement('div');
     mcq.className = 'dash-widget';
     mcq.id = 'parentMcqWidget';
@@ -353,7 +353,7 @@ function ensureParentExtraWidgets() {
   }
 
   // Topic progress widget
-  if (!document.getElementById('parentTopicWidget')) {
+  if (!document.getElementById('parentTopicWidget') && !document.getElementById('parentTopicProgress')) {
     const topics = document.createElement('div');
     topics.className = 'dash-widget';
     topics.id = 'parentTopicWidget';
@@ -365,7 +365,7 @@ function ensureParentExtraWidgets() {
   }
 
   // Question papers widget
-  if (!document.getElementById('parentPapersWidget')) {
+  if (!document.getElementById('parentPapersWidget') && !document.getElementById('parentQuestionPapers')) {
     const papers = document.createElement('div');
     papers.className = 'dash-widget';
     papers.id = 'parentPapersWidget';
@@ -377,7 +377,7 @@ function ensureParentExtraWidgets() {
   }
 
   // Weak/strong topics widget
-  if (!document.getElementById('parentTopicsWidget')) {
+  if (!document.getElementById('parentTopicsWidget') && !document.getElementById('parentWeakTopics') && !document.getElementById('parentStrongTopics')) {
     const topicTags = document.createElement('div');
     topicTags.className = 'dash-widget';
     topicTags.id = 'parentTopicsWidget';
