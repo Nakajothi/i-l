@@ -45,12 +45,12 @@ function convertSql(sql) {
 
   // --- Unique index fixes (partial index for nullable columns) ---
   s = s.replace(
-    /CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_students_google_sub\s+ON\s+students\s*\(\s*google_sub\s*\)/gi,
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub) WHERE google_sub IS NOT NULL'
+    /CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_students_google_sub\s+ON\s+students\s*\(\s*google_sub\s*\)(?:\s+WHERE\s+google_sub\s+IS\s+NOT\s+NULL)?/gi,
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub)'
   );
   s = s.replace(
-    /CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_teachers_google_sub\s+ON\s+teachers\s*\(\s*google_sub\s*\)/gi,
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub) WHERE google_sub IS NOT NULL'
+    /CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_teachers_google_sub\s+ON\s+teachers\s*\(\s*google_sub\s*\)(?:\s+WHERE\s+google_sub\s+IS\s+NOT\s+NULL)?/gi,
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub)'
   );
 
   // --- Date/time functions ---
