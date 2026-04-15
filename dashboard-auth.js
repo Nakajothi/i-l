@@ -394,30 +394,6 @@ function ensureParentExtraWidgets() {
     `;
     parentTab.appendChild(topicTags);
   }
-
-  // Summary cards widget
-  if (!document.getElementById('parentSummaryWidget')) {
-    const summary = document.createElement('div');
-    summary.className = 'dash-widget';
-    summary.id = 'parentSummaryWidget';
-    summary.innerHTML = `
-      <h4>📊 Quick Summary</h4>
-      <div class="metric-row">
-        <span class="metric-label">Attendance %</span>
-        <span class="metric-value up" id="parentSummaryAttendance">--</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-label">MCQ Score</span>
-        <span class="metric-value" id="parentSummaryMcq">--</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-label">Fee Pending</span>
-        <span class="metric-value" id="parentSummaryFee">--</span>
-      </div>
-      <div class="dash-updated" id="parentSummaryAttendanceUpdated">Last updated: --</div>
-    `;
-    parentTab.appendChild(summary);
-  }
 }
 
 function injectParentTabData(report, student) {
@@ -429,6 +405,7 @@ function injectParentTabData(report, student) {
   const weeklyTests = report.weeklyTests || [];
   const dailyMcqSet = report.dailyMcqSet || {};
   const mcqQuestions = Array.isArray(dailyMcqSet.questions) ? dailyMcqSet.questions : [];
+  const recentMcqs = Array.isArray(report.recentMcqs) ? report.recentMcqs : [];
   const questionPapers = report.questionPapers || [];
   const weakTopics = report.weakTopics || [];
   const strongTopics = report.strongTopics || [];
@@ -459,14 +436,8 @@ function injectParentTabData(report, student) {
     setUpdatedLabel('parentFeeUpdated', now);
   }
 
-  // ── Summary widget ──
-  setElementText('parentSummaryAttendance', `${overallAtt.percentage || 0}%`);
-  setUpdatedLabel('parentSummaryAttendanceUpdated', now);
-
-  const answered = mcqQuestions.filter(q => q.selected_index !== null && q.selected_index !== undefined);
+  const answered = recentMcqs.filter(q => q.selected_index !== null && q.selected_index !== undefined);
   const correct = answered.filter(q => q.is_correct === 1 || q.is_correct === true).length;
-  setElementText('parentSummaryMcq', mcqQuestions.length ? `${correct}/${mcqQuestions.length} correct` : 'No MCQ yet');
-  setElementText('parentSummaryFee', `Rs ${feeSummary?.pending || 0}`);
 
   // ── Weekly tests widget ──
   const weeklyWrap = document.getElementById('parentWeeklyTests');
@@ -487,24 +458,32 @@ function injectParentTabData(report, student) {
   // ── MCQ widget ──
   const mcqSummary = document.getElementById('parentMcqSummary');
   if (mcqSummary) {
-    mcqSummary.textContent = dailyMcqSet.batchTitle
-      ? `${dailyMcqSet.batchTitle} — ${correct}/${mcqQuestions.length} correct`
-      : 'No active MCQ batch right now.';
+    if (recentMcqs.length) {
+      mcqSummary.textContent = `${correct}/${recentMcqs.length} recent MCQs correct`;
+    } else if (dailyMcqSet.batchTitle) {
+      mcqSummary.textContent = `${dailyMcqSet.batchTitle} — waiting for student attempt`;
+    } else {
+      mcqSummary.textContent = 'No recent MCQ submissions yet.';
+    }
   }
   const mcqList = document.getElementById('parentMcqList');
   if (mcqList) {
-    mcqList.innerHTML = mcqQuestions.slice(0, 6).map((item, idx) => {
+    const sourceItems = recentMcqs.length ? recentMcqs : mcqQuestions;
+    mcqList.innerHTML = sourceItems.slice(0, 6).map((item, idx) => {
       const attempted = item.selected_index !== null && item.selected_index !== undefined;
       const isCorrect = item.is_correct === 1 || item.is_correct === true;
       return `
         <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="font-weight:700;font-size:0.88rem;">Q${idx + 1}: ${item.question || 'Question'}</div>
+          <div style="font-weight:700;font-size:0.88rem;">Q${item.question_no || idx + 1}: ${item.question || item.title || 'Question'}</div>
           <div style="font-size:0.82rem;margin-top:6px;color:${attempted ? (isCorrect ? 'var(--green)' : 'var(--yellow)') : 'var(--muted)'};">
             ${attempted ? (isCorrect ? '✓ Answered correctly' : '✗ Needs review') : 'Not attempted yet'}
           </div>
         </div>
       `;
     }).join('');
+    if (!sourceItems.length) {
+      mcqList.innerHTML = '<span style="color:var(--muted);font-size:0.88rem;">No MCQ activity yet.</span>';
+    }
     setUpdatedLabel('parentMcqUpdated', now);
   }
 
@@ -570,7 +549,6 @@ window.addEventListener('load', () => {
     setupParentDashboard();
   }
 });
-
 
 
 
