@@ -74,7 +74,6 @@ function switchTab(tab, el) {
 function openLoginModal() {
   document.getElementById('loginModal').classList.add('open');
   document.body.style.overflow = 'hidden';
-  resetParentOTP();
   updateAuthRequiredState();
 }
 
@@ -222,7 +221,6 @@ function setLoginType(type) {
   ['student', 'parent', 'teacher'].forEach((key) => {
     document.getElementById('ltab-' + key)?.classList.toggle('active', key === type);
   });
-  resetParentOTP();
 }
 
 function flashInput(id, msg) {
@@ -236,14 +234,7 @@ function flashInput(id, msg) {
 }
 
 // ── PARENT OTP LOGIN ──────────────────────────────────────────────────────────
-let parentOTP = null;
-let parentMobile = null;
 let currentLoginType = 'student';
-
-function showOTPError(msg) {
-  const errEl = document.getElementById('parentOTPError');
-  if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
-}
 
 async function sendParentOTP() {
   const raw = (document.getElementById('lp-mobile')?.value || '').trim();
@@ -609,6 +600,9 @@ function getProfileData() {
         { label: 'Role', value: 'Parent' },
         { label: 'Student', value: student.name || 'Linked student' },
         { label: 'Class', value: student.class ? 'Class ' + student.class : 'Not available' },
+        { label: 'Email', value: student.email || 'Not available' },
+        { label: 'Subject', value: student.subject || 'Maths' },
+        { label: 'Board', value: student.board || 'Not available' },
         { label: 'Attendance', value: total ? `${percentage}% (${present}/${total})` : 'No attendance yet' }
       ]
     };
@@ -1425,6 +1419,7 @@ window.addEventListener('load', async () => {
     updateHomeForSession();
   }
 });
+
 
 
 
