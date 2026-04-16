@@ -160,13 +160,6 @@ function redirectToTeacherDashboard() {
   const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
   if (isHome) {
     updateHomeForSession();
-    if (hasActiveTeacherSession()) {
-      refreshRoleData().then(() => {
-        loadTeacherAttendance();
-        loadTeacherMcqs();
-        loadTeacherDoubts();
-      });
-    }
     const teacherTab = document.getElementById('teacherDashTab');
     if (teacherTab) switchTab('teacher', teacherTab);
     document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
@@ -674,7 +667,6 @@ async function refreshParentDashboard() {
     const report = profile.report || profile;
     const student = profile.student || {};
 
-    // Inject all parent tab data
     if (typeof injectParentTabData === 'function') {
       injectParentTabData(report, student);
     }
@@ -700,7 +692,7 @@ async function refreshRoleData() {
       }
     } else if (role === 'parent') {
       await refreshParentDashboard();
-      return; // refreshParentDashboard already calls updateDashboardAttendanceCards
+      return;
     } else if (role === 'teacher') {
       const teacher = JSON.parse(localStorage.getItem('ilearn_teacher') || '{}');
       localStorage.setItem('ilearn_teacher', JSON.stringify(teacher));
@@ -782,7 +774,6 @@ function updateDashboardAttendanceCards() {
   setElementText('dashboardWelcomeRole', role ? `Signed in as ${role}` : 'Sign in to view your dashboard');
   setUpdatedLabel('dashboardWelcomeUpdated', now);
 
-  // ── Student attendance ──
   const studentMonth = studentProfile.attendanceSummary?.month || null;
   const studentOverall = studentProfile.attendanceSummary?.overall || null;
   if (studentMonth || studentOverall) {
@@ -800,7 +791,6 @@ function updateDashboardAttendanceCards() {
   setElementText('studentStreakValue', streakValue + ' day' + (streakValue === 1 ? '' : 's'));
   setUpdatedLabel('studentStreakUpdated', now);
 
-  // ── Parent attendance (existing HTML cards) ──
   const report = parentProfile.report || parentProfile;
   const parentStudent = parentProfile.student || parentStored;
   const parentMonth = report?.attendanceSummary?.month || report?.attendance || null;
@@ -815,7 +805,6 @@ function updateDashboardAttendanceCards() {
     setUpdatedLabel('parentAttendanceUpdated', now);
   }
 
-  // ── Parent fee card (existing HTML) ──
   const feeSummary = report?.feeSummary || null;
   if (feeSummary || parentStudent?.class) {
     setElementText('parentFeeBatch', parentStudent?.class ? `Class ${parentStudent.class}` : 'Linked batch');
@@ -826,7 +815,6 @@ function updateDashboardAttendanceCards() {
     setUpdatedLabel('parentFeeUpdated', now);
   }
 
-  // ── Render all extra parent widgets ──
   if (role === 'parent' && (parentMonth || parentStudent?.name)) {
     if (typeof injectParentTabData === 'function') {
       injectParentTabData(report, parentStudent);
@@ -836,41 +824,68 @@ function updateDashboardAttendanceCards() {
   renderTodayTimetableReminder();
 }
 
+// ── FIX: updateHomeForSession — correctly shows teacher dashboard ──────────────
 function updateHomeForSession() {
   const role = getCurrentRole();
-  const studentOnly = document.querySelectorAll('.role-student-only');
-  const parentOnly = document.querySelectorAll('.role-parent-only');
-  const teacherOnly = document.querySelectorAll('.role-teacher-only');
+
+  // Show/hide role-specific sections
+  document.querySelectorAll('.role-student-only').forEach((el) => {
+    el.style.display = (!role || role === 'student') ? '' : 'none';
+  });
+  document.querySelectorAll('.role-parent-only').forEach((el) => {
+    el.style.display = (!role || role === 'parent') ? '' : 'none';
+  });
+  document.querySelectorAll('.role-teacher-only').forEach((el) => {
+    // Use 'block' for generic elements, but dash-content tabs need 'grid'
+    el.style.display = role === 'teacher' ? '' : 'none';
+  });
+
+  // Hide assessment and AI features sections for teacher
+  [document.getElementById('assessment'), document.getElementById('ai-features')].forEach((section) => {
+    if (section) section.style.display = role === 'teacher' ? 'none' : '';
+  });
+
+  // Get tab and content elements
   const studentTab = document.getElementById('studentDashTab');
   const parentTab = document.getElementById('parentDashTab');
   const teacherTab = document.getElementById('teacherDashTab');
   const studentContent = document.getElementById('tab-student');
   const parentContent = document.getElementById('tab-parent');
   const teacherContent = document.getElementById('tab-teacher');
-  const teacherHiddenSections = [document.getElementById('assessment'), document.getElementById('ai-features')];
 
-  studentOnly.forEach((el) => { el.style.display = !role || role === 'student' ? '' : 'none'; });
-  parentOnly.forEach((el) => { el.style.display = !role || role === 'parent' ? '' : 'none'; });
-  teacherOnly.forEach((el) => { el.style.display = role === 'teacher' ? '' : 'none'; });
-  teacherHiddenSections.forEach((section) => { if (section) section.style.display = role === 'teacher' ? 'none' : ''; });
+  // Reset all tabs and contents first
+  [studentTab, parentTab, teacherTab].forEach(t => t && t.classList.remove('active'));
+  [studentContent, parentContent, teacherContent].forEach(c => {
+    if (c) { c.classList.remove('active'); c.style.display = 'none'; }
+  });
 
-  if (role === 'student') {
-    studentTab?.classList.add('active'); parentTab?.classList.remove('active'); teacherTab?.classList.remove('active');
+  if (role === 'teacher') {
+    // Show teacher tab button (it's role-teacher-only so may be hidden — force show)
+    if (teacherTab) { teacherTab.style.display = ''; teacherTab.classList.add('active'); }
+    // Hide student/parent tabs
+    if (studentTab) studentTab.style.display = 'none';
+    if (parentTab) parentTab.style.display = 'none';
+    // Show teacher content with grid display
+    if (teacherContent) {
+      teacherContent.classList.add('active');
+      teacherContent.style.display = 'grid';
+    }
+  } else if (role === 'student') {
+    if (studentTab) { studentTab.style.display = ''; studentTab.classList.add('active'); }
+    if (parentTab) parentTab.style.display = 'none';
+    if (teacherTab) teacherTab.style.display = 'none';
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
-    if (parentContent) { parentContent.classList.remove('active'); parentContent.style.display = 'none'; }
-    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
   } else if (role === 'parent') {
-    parentTab?.classList.add('active'); studentTab?.classList.remove('active'); teacherTab?.classList.remove('active');
+    if (parentTab) { parentTab.style.display = ''; parentTab.classList.add('active'); }
+    if (studentTab) studentTab.style.display = 'none';
+    if (teacherTab) teacherTab.style.display = 'none';
     if (parentContent) { parentContent.classList.add('active'); parentContent.style.display = 'grid'; }
-    if (studentContent) { studentContent.classList.remove('active'); studentContent.style.display = 'none'; }
-    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
-    // Ensure parent extra widgets exist
     if (typeof ensureParentExtraWidgets === 'function') ensureParentExtraWidgets();
-  } else if (role === 'teacher') {
-    teacherTab?.classList.add('active'); studentTab?.classList.remove('active'); parentTab?.classList.remove('active');
-    if (teacherContent) { teacherContent.classList.add('active'); teacherContent.style.display = 'grid'; }
-    if (studentContent) { studentContent.classList.remove('active'); studentContent.style.display = 'none'; }
-    if (parentContent) { parentContent.classList.remove('active'); parentContent.style.display = 'none'; }
+  } else {
+    // No role — show all tabs, student tab active by default
+    [studentTab, parentTab, teacherTab].forEach(t => t && (t.style.display = ''));
+    if (studentTab) studentTab.classList.add('active');
+    if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   }
 
   renderNavProfile();
@@ -1398,33 +1413,29 @@ async function renderDailyMcqs(role) {
   }
 }
 
-// ── PAGE LOAD ─────────────────────────────────────────────────────────────────
+// ── FIX: PAGE LOAD — teacher dashboard loads data correctly ───────────────────
 window.addEventListener('load', async () => {
   renderTeacherMcqCards();
 
   const role = getCurrentRole();
 
-  if (role === 'student') {
-    await refreshRoleData();
-    updateHomeForSession();
-    loadStudentResources();
-    loadStudentDoubts();
+  // Apply session UI first (shows correct tab, hides others)
+  updateHomeForSession();
+
+  if (role === 'teacher') {
+    // Load all teacher data
+    try { await loadTeacherAttendance(); } catch (e) { console.warn('Teacher attendance load failed:', e.message); }
+    try { await loadTeacherMcqs(); } catch (e) { console.warn('Teacher MCQ load failed:', e.message); }
+    try { await loadTeacherDoubts(); } catch (e) { console.warn('Teacher doubts load failed:', e.message); }
+    updateDashboardAttendanceCards();
+    renderNavProfile();
+  } else if (role === 'student') {
+    try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
+    try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
+    try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
   } else if (role === 'parent') {
-    updateHomeForSession();
-    await refreshParentDashboard();
-    loadStudentResources();
-  } else if (role === 'teacher') {
-    await refreshRoleData();
-    updateHomeForSession();
-    loadTeacherAttendance();
-    loadTeacherMcqs();
-    loadTeacherDoubts();
-    if (window.location.hash === '#teacher-dashboard') {
-      const teacherTab = document.getElementById('teacherDashTab');
-      if (teacherTab) switchTab('teacher', teacherTab);
-    }
-  } else {
-    updateHomeForSession();
+    try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
+    try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
 
