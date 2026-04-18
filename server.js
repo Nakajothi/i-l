@@ -656,7 +656,6 @@ async function sendOtpSms(mobileDigits, otp) {
   app.use(express.static(__dirname));
 
   const limiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
-  const otpLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Too many OTP requests. Wait 1 minute.' } });
   app.use('/api/', limiter);
 
   // ── ALL YOUR EXISTING ROUTES GO HERE (unchanged) ────────────────
