@@ -411,6 +411,14 @@ function injectParentTabData(report, student) {
 
   // Normalise the report — the API returns flat + nested simultaneously
   // /api/parent/report returns { student, report: {...}, ...flatFields }
+  let effectiveStudent = student;
+  if (!effectiveStudent || !Object.keys(effectiveStudent).length) {
+    try {
+      effectiveStudent = JSON.parse(localStorage.getItem('ilearn_student') || localStorage.getItem('ilearn_parent_student') || '{}');
+    } catch {
+      effectiveStudent = {};
+    }
+  }
   const normalizedReport = report.report || report;
 
   const monthAtt   = normalizedReport.attendanceSummary?.month
@@ -432,13 +440,13 @@ function injectParentTabData(report, student) {
   // ── Attendance ──────────────────────────────────────────────────────────────
   setElementText('parentAttendanceMonth',          `${monthAtt.present || 0} / ${monthAtt.total || 0} days`);
   setElementText('parentAttendanceOverall',        `${overallAtt.percentage || 0}%`);
-  setElementText('parentAttendanceStudent',        student?.name || 'Linked student');
+  setElementText('parentAttendanceStudent',        effectiveStudent?.name || 'Linked student');
   setElementText('parentAttendanceProgressLabel',  `${overallAtt.percentage || 0}%`);
   setElementWidth('parentAttendanceProgress',      `${Math.max(0, Math.min(100, Number(overallAtt.percentage || 0)))}%`);
   setUpdatedLabel('parentAttendanceUpdated', now);
 
   // ── Fee summary ─────────────────────────────────────────────────────────────
-  setElementText('parentFeeBatch',   student?.class ? `Class ${student.class}` : 'Linked batch');
+  setElementText('parentFeeBatch',   effectiveStudent?.class ? `Class ${effectiveStudent.class}` : 'Linked batch');
   const pendingAmt = Number(feeSummary?.pending || 0);
   setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No fee entries yet');
   setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
@@ -595,6 +603,5 @@ window.addEventListener('load', () => {
     setupParentDashboard();
   }
 });
-
 
 
