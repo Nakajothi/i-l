@@ -139,6 +139,67 @@ function buildFeeSummary(studentId, studentClass) {
   const totalDue  = getClassFeeTarget(studentClass);
   return { totalDue, totalPaid: Math.round(totalPaid * 100) / 100, pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100), payments };
 }
+function buildTeacherStudentsSnapshot(selectedDate = '') {
+  const students = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students ORDER BY class, name').all();
+  const attendanceByStudent = db.prepare("SELECT student_id, SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS presentCount, COUNT(*) AS totalCount FROM attendance GROUP BY student_id").all();
+  const attendanceMap = new Map(attendanceByStudent.map((row) => [row.student_id, row]));
+  const attendanceForDate = selectedDate ? db.prepare('SELECT student_id, status FROM attendance WHERE date=?').all(selectedDate) : [];
+  const statusMap = new Map(attendanceForDate.map((row) => [row.student_id, row.status]));
+
+  let feePayments = [];
+  try {
+    feePayments = db.prepare('SELECT student_id, amount_paid, paid_on, created_at FROM fee_payments ORDER BY paid_on DESC, created_at DESC').all();
+  } catch (error) {
+    console.warn('[teacher snapshot fee_payments]', error.message);
+  }
+  const feePaymentsMap = new Map();
+  feePayments.forEach((payment) => {
+    const list = feePaymentsMap.get(payment.student_id) || [];
+    list.push(payment);
+    feePaymentsMap.set(payment.student_id, list);
+  });
+
+  let latestWeeklyTests = [];
+  try {
+    latestWeeklyTests = db.prepare(`
+      SELECT student_id, title, test_date, marks_obtained, total_marks
+      FROM (
+        SELECT student_id, title, test_date, marks_obtained, total_marks,
+               ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY test_date DESC, created_at DESC) AS row_num
+        FROM weekly_tests
+      ) ranked_tests WHERE row_num = 1
+    `).all();
+  } catch (error) {
+    console.warn('[teacher snapshot weekly_tests]', error.message);
+  }
+  const latestWeeklyTestMap = new Map(latestWeeklyTests.map((t) => [t.student_id, t]));
+
+  return students.map((student) => {
+    const stats = attendanceMap.get(student.id) || { presentCount: 0, totalCount: 0 };
+    const totalCount = Number(stats.totalCount) || 0;
+    const presentCount = Number(stats.presentCount) || 0;
+    const payments = feePaymentsMap.get(student.id) || [];
+    const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0);
+    const totalDue = getClassFeeTarget(student.class);
+    return {
+      ...student,
+      approvalStatus: String(student.approval_status || 'accepted').toLowerCase(),
+      currentStatus: statusMap.get(student.id) || null,
+      attendance: {
+        present: presentCount,
+        total: totalCount,
+        percentage: totalCount ? Math.round((presentCount / totalCount) * 1000) / 10 : 0
+      },
+      feeSummary: {
+        totalDue,
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100),
+        payments
+      },
+      latestWeeklyTest: latestWeeklyTestMap.get(student.id) || null
+    };
+  });
+}
 function getStudentQuestionPapers(studentClass) {
   return db.prepare("SELECT id, title, class_scope, resource_type, resource_url, posted_at FROM question_papers WHERE class_scope=? OR class_scope='all' ORDER BY posted_at DESC LIMIT 10").all(String(studentClass || '').trim());
 }
@@ -1333,7 +1394,7 @@ app.post('/api/teacher/weekly-tests', authTeacher, (req, res) => {
     });
   });
   transaction(entries);
-  res.json({ success: true });
+  res.json({ success: true, students: buildTeacherStudentsSnapshot() });
 });
 
 app.post('/api/teacher/fees', authTeacher, (req, res) => {
@@ -1360,60 +1421,11 @@ app.get('/api/teacher/students', authTeacher, (req, res) => {
   try {
     try { syncAttendanceFromSheet(); } catch (e) { console.warn('[syncSheet]', e.message); }
     const selectedDate = String(req.query.date || '').trim();
-    const students     = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students ORDER BY class, name').all();
-    const attendanceByStudent = db.prepare("SELECT student_id, SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS presentCount, COUNT(*) AS totalCount FROM attendance GROUP BY student_id").all();
-    const attendanceMap = new Map(attendanceByStudent.map((row) => [row.student_id, row]));
-    const attendanceForDate = selectedDate ? db.prepare('SELECT student_id, status FROM attendance WHERE date=?').all(selectedDate) : [];
-    const statusMap   = new Map(attendanceForDate.map((row) => [row.student_id, row.status]));
-
-    let feePayments = [];
-    try {
-      feePayments = db.prepare('SELECT student_id, amount_paid, paid_on, created_at FROM fee_payments ORDER BY paid_on DESC, created_at DESC').all();
-    } catch (error) {
-      console.warn('[teacher/students fee_payments]', error.message);
-    }
-    const feePaymentsMap = new Map();
-    feePayments.forEach((payment) => {
-      const list = feePaymentsMap.get(payment.student_id) || [];
-      list.push(payment);
-      feePaymentsMap.set(payment.student_id, list);
-    });
-
-    let latestWeeklyTests = [];
-    try {
-      latestWeeklyTests = db.prepare(`
-        SELECT student_id, title, test_date, marks_obtained, total_marks
-        FROM (
-          SELECT student_id, title, test_date, marks_obtained, total_marks,
-                 ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY test_date DESC, created_at DESC) AS row_num
-          FROM weekly_tests
-        ) ranked_tests WHERE row_num = 1
-      `).all();
-    } catch (error) {
-      console.warn('[teacher/students weekly_tests]', error.message);
-    }
-    const latestWeeklyTestMap = new Map(latestWeeklyTests.map((t) => [t.student_id, t]));
-
     res.json({
       teacher: { id: req.teacher.id, name: req.teacher.name, email: req.teacher.email },
       selectedDate: selectedDate || null,
       attendanceSheet: { path: ATTENDANCE_SHEET, fileName: path.basename(ATTENDANCE_SHEET) },
-      students: students.map((student) => {
-        const stats     = attendanceMap.get(student.id) || { presentCount: 0, totalCount: 0 };
-        const totalCount  = Number(stats.totalCount)   || 0;
-        const presentCount= Number(stats.presentCount) || 0;
-        const payments  = feePaymentsMap.get(student.id) || [];
-        const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0);
-        const totalDue  = getClassFeeTarget(student.class);
-        return {
-          ...student,
-          approvalStatus: String(student.approval_status || 'accepted').toLowerCase(),
-          currentStatus:  statusMap.get(student.id) || null,
-          attendance:     { present: presentCount, total: totalCount, percentage: totalCount ? Math.round((presentCount / totalCount) * 1000) / 10 : 0 },
-          feeSummary:     { totalDue, totalPaid: Math.round(totalPaid * 100) / 100, pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100), payments },
-          latestWeeklyTest: latestWeeklyTestMap.get(student.id) || null
-        };
-      })
+      students: buildTeacherStudentsSnapshot(selectedDate)
     });
   } catch (error) {
     console.error('[GET /api/teacher/students]', error.message);
@@ -1440,7 +1452,12 @@ app.post('/api/teacher/attendance', authTeacher, (req, res) => {
   });
   transaction(attendance);
   refreshSheets();
-  res.json({ success: true, updated: attendance.length, sheetPath: ATTENDANCE_SHEET });
+  res.json({
+    success: true,
+    updated: attendance.length,
+    sheetPath: ATTENDANCE_SHEET,
+    students: buildTeacherStudentsSnapshot(date)
+  });
 });
 
 app.post('/api/attendance/mark', authTeacher, (req, res) => {
@@ -1549,6 +1566,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
