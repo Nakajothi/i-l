@@ -660,19 +660,29 @@ async function loginTeacher() {
 async function refreshParentDashboard() {
   if (!hasActiveParentSession()) return;
   try {
-    const profile = await API.getParentReport();
-    localStorage.setItem('ilearn_parent_profile', JSON.stringify(profile));
-    localStorage.setItem('ilearn_parent_student', JSON.stringify(profile.student || {}));
-
-    const report = profile.report || profile;
-    const student = profile.student || {};
-
+    // Single API call gets everything the parent tab needs
+    const apiResponse = await API.getParentReport();
+ 
+    // apiResponse shape from server:
+    // { student, report: { ...all fields }, ...flatFields (same fields at top level) }
+    const student = apiResponse.student || {};
+    const report  = apiResponse.report  || apiResponse; // works whether nested or flat
+ 
+    // Persist for offline reads by updateDashboardAttendanceCards
+    localStorage.setItem('ilearn_parent_profile',  JSON.stringify(apiResponse));
+    localStorage.setItem('ilearn_parent_student',  JSON.stringify(student));
+ 
+    // ── Inject all data into the parent tab widgets ──
+    // injectParentTabData in dashboard-auth.js accepts the raw API response
+    // and handles both the nested (report.report.X) and flat (report.X) shapes.
     if (typeof injectParentTabData === 'function') {
-      injectParentTabData(report, student);
+      injectParentTabData(apiResponse, student);
     }
-
+ 
+    // ── Update the top-level welcome/attendance cards ──
     updateDashboardAttendanceCards();
     renderNavProfile();
+ 
   } catch (err) {
     console.warn('Parent dashboard refresh failed:', err.message || err);
   }
@@ -755,75 +765,86 @@ function renderTodayTimetableReminder() {
 }
 
 function updateDashboardAttendanceCards() {
-  const now = new Date();
+  const now  = new Date();
   const role = getCurrentRole();
-
+ 
+  // ── Read cached data ──
   const studentProfile = getStoredProfileState('ilearn_student_profile');
-  const studentStored = getStoredProfileState('ilearn_student');
-  const parentProfile = getStoredProfileState('ilearn_parent_profile');
-  const parentStored = getStoredProfileState('ilearn_parent_student');
-  const teacherStored = getStoredProfileState('ilearn_teacher');
-
+  const studentStored  = getStoredProfileState('ilearn_student');
+  // Parent profile is the raw API response stored by refreshParentDashboard
+  const parentApiResponse = getStoredProfileState('ilearn_parent_profile');
+  const parentStored      = getStoredProfileState('ilearn_parent_student');
+  const teacherStored     = getStoredProfileState('ilearn_teacher');
+ 
+  // ── Welcome banner ──
   const welcomeName = role === 'student'
     ? (studentProfile.student?.name || studentStored.name || 'Student')
-    : (role === 'parent'
-      ? (parentProfile.student?.name || parentStored.name || 'Parent')
-      : (role === 'teacher' ? (teacherStored.name || 'Teacher') : 'Learner'));
-
-  setElementText('dashboardWelcomeName', welcomeName || 'Learner');
-  setElementText('dashboardWelcomeRole', role ? `Signed in as ${role}` : 'Sign in to view your dashboard');
+    : role === 'parent'
+      ? (parentApiResponse.student?.name || parentStored.name || 'Parent')
+      : role === 'teacher'
+        ? (teacherStored.name || 'Teacher')
+        : 'Learner';
+ 
+  setElementText('dashboardWelcomeName',    welcomeName || 'Learner');
+  setElementText('dashboardWelcomeRole',    role ? `Signed in as ${role}` : 'Sign in to view your dashboard');
   setUpdatedLabel('dashboardWelcomeUpdated', now);
-
-  const studentMonth = studentProfile.attendanceSummary?.month || null;
+ 
+  // ── Student attendance card ──
+  const studentMonth   = studentProfile.attendanceSummary?.month   || null;
   const studentOverall = studentProfile.attendanceSummary?.overall || null;
   if (studentMonth || studentOverall) {
-    setElementText('studentAttendanceMonth', `${studentMonth?.present || 0} / ${studentMonth?.total || 0} days`);
-    setElementText('studentAttendanceOverall', `${studentOverall?.percentage || 0}%`);
+    setElementText('studentAttendanceMonth',         `${studentMonth?.present || 0} / ${studentMonth?.total || 0} days`);
+    setElementText('studentAttendanceOverall',       `${studentOverall?.percentage || 0}%`);
     setElementText('studentAttendanceProgressLabel', `${studentOverall?.percentage || 0}%`);
-    setElementWidth('studentAttendanceProgress', `${Math.max(0, Math.min(100, Number(studentOverall?.percentage || 0)))}%`);
+    setElementWidth('studentAttendanceProgress',     `${Math.max(0, Math.min(100, Number(studentOverall?.percentage || 0)))}%`);
     setElementText('studentAttendanceHint', studentOverall?.total
       ? `Overall attendance: ${studentOverall.present}/${studentOverall.total} classes marked.`
       : 'Attendance will appear here once your teacher starts marking it.');
   }
   setUpdatedLabel('studentAttendanceUpdated', now);
-
+ 
+  // ── Student MCQ streak ──
   const streakValue = Number(studentProfile.mcqStreak || 0);
   setElementText('studentStreakValue', streakValue + ' day' + (streakValue === 1 ? '' : 's'));
   setUpdatedLabel('studentStreakUpdated', now);
-
-  const report = parentProfile.report || parentProfile;
-  const parentStudent = parentProfile.student || parentStored;
-  const parentMonth = report?.attendanceSummary?.month || report?.attendance || null;
-  const parentOverall = report?.attendanceSummary?.overall || parentMonth;
-
-  if (parentMonth !== null || parentStudent?.name) {
-    setElementText('parentAttendanceMonth', `${parentMonth?.present || 0} / ${parentMonth?.total || 0} days`);
-    setElementText('parentAttendanceOverall', `${parentOverall?.percentage || 0}%`);
-    setElementText('parentAttendanceStudent', parentStudent?.name || 'Linked student');
-    setElementText('parentAttendanceProgressLabel', `${parentOverall?.percentage || 0}%`);
-    setElementWidth('parentAttendanceProgress', `${Math.max(0, Math.min(100, Number(parentOverall?.percentage || 0)))}%`);
+ 
+  // ── Parent attendance + fee cards ──
+  // Normalise: the API response has attendance at report.attendanceSummary
+  // AND at the flat top-level — handle both.
+  const parentReport  = parentApiResponse.report || parentApiResponse;
+  const parentStudent = parentApiResponse.student || parentStored;
+ 
+  const parentMonth   = parentReport?.attendanceSummary?.month  || parentReport?.attendance || null;
+  const parentOverall = parentReport?.attendanceSummary?.overall || parentMonth;
+ 
+  if (parentMonth || parentStudent?.name) {
+    setElementText('parentAttendanceMonth',          `${parentMonth?.present || 0} / ${parentMonth?.total || 0} days`);
+    setElementText('parentAttendanceOverall',        `${parentOverall?.percentage || 0}%`);
+    setElementText('parentAttendanceStudent',        parentStudent?.name || 'Linked student');
+    setElementText('parentAttendanceProgressLabel',  `${parentOverall?.percentage || 0}%`);
+    setElementWidth('parentAttendanceProgress',      `${Math.max(0, Math.min(100, Number(parentOverall?.percentage || 0)))}%`);
     setUpdatedLabel('parentAttendanceUpdated', now);
   }
-
-  const feeSummary = report?.feeSummary || null;
+ 
+  const feeSummary = parentReport?.feeSummary || null;
   if (feeSummary || parentStudent?.class) {
-    setElementText('parentFeeBatch', parentStudent?.class ? `Class ${parentStudent.class}` : 'Linked batch');
+    setElementText('parentFeeBatch',   parentStudent?.class ? `Class ${parentStudent.class}` : 'Linked batch');
     const pendingAmt = Number(feeSummary?.pending || 0);
-    setElementText('parentFeeStatus', feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
-    setElementText('parentFeePaid', `Rs ${feeSummary?.totalPaid || 0}`);
-    setElementText('parentFeePending', `Rs ${feeSummary?.pending || 0}`);
+    setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
+    setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
+    setElementText('parentFeePending', `Rs ${feeSummary?.pending   || 0}`);
     setUpdatedLabel('parentFeeUpdated', now);
   }
-
-  if (role === 'parent' && (parentMonth || parentStudent?.name)) {
+ 
+  // ── Re-inject ALL parent tab widgets from cache (so tab-switch stays live) ──
+  if (role === 'parent' && Object.keys(parentApiResponse).length) {
     if (typeof injectParentTabData === 'function') {
-      injectParentTabData(report, parentStudent);
+      injectParentTabData(parentApiResponse, parentStudent);
     }
   }
-
+ 
   renderTodayTimetableReminder();
 }
-
 // ── FIX: updateHomeForSession — force teacher tab with inline styles, no CSS class race ──
 function updateHomeForSession() {
   const role = getCurrentRole();
