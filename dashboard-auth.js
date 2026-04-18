@@ -325,8 +325,7 @@ function ensureParentExtraWidgets() {
   const parentTab = document.getElementById('tab-parent');
   if (!parentTab) return;
 
-  // Weekly tests widget
-  if (!document.getElementById('parentWeeklyTestsWidget') && !document.getElementById('parentWeeklyTests')) {
+  if (!document.getElementById('parentWeeklyTests')) {
     const weekly = document.createElement('div');
     weekly.className = 'dash-widget';
     weekly.id = 'parentWeeklyTestsWidget';
@@ -338,8 +337,7 @@ function ensureParentExtraWidgets() {
     parentTab.appendChild(weekly);
   }
 
-  // MCQ performance widget
-  if (!document.getElementById('parentMcqWidget') && !document.getElementById('parentMcqList')) {
+  if (!document.getElementById('parentMcqList')) {
     const mcq = document.createElement('div');
     mcq.className = 'dash-widget';
     mcq.id = 'parentMcqWidget';
@@ -352,8 +350,7 @@ function ensureParentExtraWidgets() {
     parentTab.appendChild(mcq);
   }
 
-  // Topic progress widget
-  if (!document.getElementById('parentTopicWidget') && !document.getElementById('parentTopicProgress')) {
+  if (!document.getElementById('parentTopicProgress')) {
     const topics = document.createElement('div');
     topics.className = 'dash-widget';
     topics.id = 'parentTopicWidget';
@@ -364,8 +361,7 @@ function ensureParentExtraWidgets() {
     parentTab.appendChild(topics);
   }
 
-  // Question papers widget
-  if (!document.getElementById('parentPapersWidget') && !document.getElementById('parentQuestionPapers')) {
+  if (!document.getElementById('parentQuestionPapers')) {
     const papers = document.createElement('div');
     papers.className = 'dash-widget';
     papers.id = 'parentPapersWidget';
@@ -376,8 +372,7 @@ function ensureParentExtraWidgets() {
     parentTab.appendChild(papers);
   }
 
-  // Weak/strong topics widget
-  if (!document.getElementById('parentTopicsWidget') && !document.getElementById('parentWeakTopics') && !document.getElementById('parentStrongTopics')) {
+  if (!document.getElementById('parentWeakTopics') && !document.getElementById('parentStrongTopics')) {
     const topicTags = document.createElement('div');
     topicTags.className = 'dash-widget';
     topicTags.id = 'parentTopicsWidget';
@@ -396,50 +391,47 @@ function ensureParentExtraWidgets() {
   }
 }
 
+// ── CORE FIX: injectParentTabData now accepts the raw API response directly ──
 function injectParentTabData(report, student) {
+  // Ensure all widget DOM nodes exist before writing to them
   ensureParentExtraWidgets();
 
-  const monthAtt = report.attendanceSummary?.month || report.attendance || {};
-  const overallAtt = report.attendanceSummary?.overall || monthAtt;
-  const feeSummary = report.feeSummary || null;
-  const weeklyTests = report.weeklyTests || [];
-  const dailyMcqSet = report.dailyMcqSet || {};
-  const mcqQuestions = Array.isArray(dailyMcqSet.questions) ? dailyMcqSet.questions : [];
-  const recentMcqs = Array.isArray(report.recentMcqs) ? report.recentMcqs : [];
-  const questionPapers = report.questionPapers || [];
-  const weakTopics = report.weakTopics || [];
-  const strongTopics = report.strongTopics || [];
-  const latestAssessment = report.latestAssessment || null;
+  // Normalise the report — the API returns flat + nested simultaneously
+  // /api/parent/report returns { student, report: {...}, ...flatFields }
+  const normalizedReport = report.report || report;
+
+  const monthAtt   = normalizedReport.attendanceSummary?.month
+    || normalizedReport.attendance
+    || {};
+  const overallAtt = normalizedReport.attendanceSummary?.overall || monthAtt;
+  const feeSummary = normalizedReport.feeSummary || null;
+  const weeklyTests   = normalizedReport.weeklyTests   || [];
+  const dailyMcqSet   = normalizedReport.dailyMcqSet   || {};
+  const mcqQuestions  = Array.isArray(dailyMcqSet.questions) ? dailyMcqSet.questions : [];
+  const recentMcqs    = Array.isArray(normalizedReport.recentMcqs) ? normalizedReport.recentMcqs : [];
+  const questionPapers= normalizedReport.questionPapers || [];
+  const weakTopics    = normalizedReport.weakTopics    || [];
+  const strongTopics  = normalizedReport.strongTopics  || [];
+  const latestAssessment = normalizedReport.latestAssessment || null;
   const now = new Date();
 
-  // ── Attendance card (existing in HTML) ──
-  setElementText('parentAttendanceMonth', `${monthAtt.present || 0} / ${monthAtt.total || 0} days`);
-  setElementText('parentAttendanceOverall', `${overallAtt.percentage || 0}%`);
-  setElementText('parentAttendanceStudent', student?.name || 'Linked student');
-  setElementText('parentAttendanceProgressLabel', `${overallAtt.percentage || 0}%`);
-  setElementWidth('parentAttendanceProgress', `${Math.max(0, Math.min(100, Number(overallAtt.percentage || 0)))}%`);
+  // ── Attendance ──────────────────────────────────────────────────────────────
+  setElementText('parentAttendanceMonth',          `${monthAtt.present || 0} / ${monthAtt.total || 0} days`);
+  setElementText('parentAttendanceOverall',        `${overallAtt.percentage || 0}%`);
+  setElementText('parentAttendanceStudent',        student?.name || 'Linked student');
+  setElementText('parentAttendanceProgressLabel',  `${overallAtt.percentage || 0}%`);
+  setElementWidth('parentAttendanceProgress',      `${Math.max(0, Math.min(100, Number(overallAtt.percentage || 0)))}%`);
   setUpdatedLabel('parentAttendanceUpdated', now);
 
-  // ── Fee card (existing in HTML) ──
-  if (feeSummary) {
-    setElementText('parentFeeBatch', student?.class ? `Class ${student.class}` : 'Linked batch');
-    const pendingAmt = Number(feeSummary.pending || 0);
-    setElementText('parentFeeStatus', pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up');
-    setElementText('parentFeePaid', `Rs ${feeSummary.totalPaid || 0}`);
-    setElementText('parentFeePending', `Rs ${feeSummary.pending || 0}`);
-    setUpdatedLabel('parentFeeUpdated', now);
-  } else {
-    setElementText('parentFeeBatch', student?.class ? `Class ${student.class}` : 'Linked batch');
-    setElementText('parentFeeStatus', 'No fee entries yet');
-    setElementText('parentFeePaid', 'Rs 0');
-    setElementText('parentFeePending', 'Rs 0');
-    setUpdatedLabel('parentFeeUpdated', now);
-  }
+  // ── Fee summary ─────────────────────────────────────────────────────────────
+  setElementText('parentFeeBatch',   student?.class ? `Class ${student.class}` : 'Linked batch');
+  const pendingAmt = Number(feeSummary?.pending || 0);
+  setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No fee entries yet');
+  setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
+  setElementText('parentFeePending', `Rs ${feeSummary?.pending  || 0}`);
+  setUpdatedLabel('parentFeeUpdated', now);
 
-  const answered = recentMcqs.filter(q => q.selected_index !== null && q.selected_index !== undefined);
-  const correct = answered.filter(q => q.is_correct === 1 || q.is_correct === true).length;
-
-  // ── Weekly tests widget ──
+  // ── Weekly tests ────────────────────────────────────────────────────────────
   const weeklyWrap = document.getElementById('parentWeeklyTests');
   if (weeklyWrap) {
     if (!weeklyTests.length) {
@@ -455,44 +447,54 @@ function injectParentTabData(report, student) {
     setUpdatedLabel('parentWeeklyTestsUpdated', now);
   }
 
-  // ── MCQ widget ──
-  const mcqSummary = document.getElementById('parentMcqSummary');
-  if (mcqSummary) {
+  // ── MCQ performance ─────────────────────────────────────────────────────────
+  const answered = recentMcqs.filter(q => q.selected_index !== null && q.selected_index !== undefined);
+  const correct  = answered.filter(q => q.is_correct === 1 || q.is_correct === true).length;
+
+  const mcqSummaryEl = document.getElementById('parentMcqSummary');
+  if (mcqSummaryEl) {
     if (recentMcqs.length) {
-      mcqSummary.textContent = `${correct}/${recentMcqs.length} recent MCQs correct`;
+      mcqSummaryEl.textContent = `${correct}/${recentMcqs.length} recent MCQs correct`;
     } else if (dailyMcqSet.batchTitle) {
-      mcqSummary.textContent = `${dailyMcqSet.batchTitle} — waiting for student attempt`;
+      mcqSummaryEl.textContent = `${dailyMcqSet.batchTitle} — waiting for student attempt`;
     } else {
-      mcqSummary.textContent = 'No recent MCQ submissions yet.';
+      mcqSummaryEl.textContent = 'No recent MCQ submissions yet.';
     }
   }
-  const mcqList = document.getElementById('parentMcqList');
-  if (mcqList) {
+
+  const mcqListEl = document.getElementById('parentMcqList');
+  if (mcqListEl) {
+    // Show recent submissions first; fall back to current batch questions
     const sourceItems = recentMcqs.length ? recentMcqs : mcqQuestions;
-    mcqList.innerHTML = sourceItems.slice(0, 6).map((item, idx) => {
-      const attempted = item.selected_index !== null && item.selected_index !== undefined;
-      const isCorrect = item.is_correct === 1 || item.is_correct === true;
-      return `
-        <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="font-weight:700;font-size:0.88rem;">Q${item.question_no || idx + 1}: ${item.question || item.title || 'Question'}</div>
-          <div style="font-size:0.82rem;margin-top:6px;color:${attempted ? (isCorrect ? 'var(--green)' : 'var(--yellow)') : 'var(--muted)'};">
-            ${attempted ? (isCorrect ? '✓ Answered correctly' : '✗ Needs review') : 'Not attempted yet'}
-          </div>
-        </div>
-      `;
-    }).join('');
     if (!sourceItems.length) {
-      mcqList.innerHTML = '<span style="color:var(--muted);font-size:0.88rem;">No MCQ activity yet.</span>';
+      mcqListEl.innerHTML = '<span style="color:var(--muted);font-size:0.88rem;">No MCQ activity yet.</span>';
+    } else {
+      mcqListEl.innerHTML = sourceItems.slice(0, 6).map((item, idx) => {
+        const attempted  = item.selected_index !== null && item.selected_index !== undefined;
+        const isCorrect  = item.is_correct === 1 || item.is_correct === true;
+        const statusText = attempted ? (isCorrect ? '✓ Answered correctly' : '✗ Needs review') : 'Not attempted yet';
+        const statusCol  = attempted ? (isCorrect ? 'var(--green)' : 'var(--yellow)') : 'var(--muted)';
+        return `
+          <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="font-weight:700;font-size:0.88rem;">Q${item.question_no || idx + 1}: ${item.question || item.title || 'Question'}</div>
+            <div style="font-size:0.82rem;margin-top:6px;color:${statusCol};">${statusText}</div>
+          </div>
+        `;
+      }).join('');
     }
     setUpdatedLabel('parentMcqUpdated', now);
   }
 
-  // ── Topic performance ──
-  const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
+  // ── Topic performance ───────────────────────────────────────────────────────
+  const topicScores = latestAssessment?.topic_scores
+    ? JSON.parse(latestAssessment.topic_scores || '{}')
+    : (normalizedReport.topicScores || {});
+
   const topicWrap = document.getElementById('parentTopicProgress');
   if (topicWrap) {
-    if (Object.keys(topicScores).length) {
-      topicWrap.innerHTML = Object.entries(topicScores).slice(0, 5).map(([topic, score]) => {
+    const entries = Object.entries(topicScores);
+    if (entries.length) {
+      topicWrap.innerHTML = entries.slice(0, 5).map(([topic, score]) => {
         const pct = Number(score) || 0;
         const col = pct >= 75 ? '#00E5A0' : pct >= 50 ? '#FFD166' : '#FF2D78';
         return `
@@ -511,14 +513,15 @@ function injectParentTabData(report, student) {
     }
   }
 
-  // ── Question papers ──
+  // ── Question papers ─────────────────────────────────────────────────────────
   const paperWrap = document.getElementById('parentQuestionPapers');
   if (paperWrap) {
     if (!questionPapers.length) {
       paperWrap.innerHTML = '<span style="color:var(--muted);font-size:0.88rem;">No question papers posted yet.</span>';
     } else {
       paperWrap.innerHTML = questionPapers.slice(0, 5).map(paper => `
-        <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#E8E8F5;text-decoration:none;">
+        <a href="${paper.resource_url}" target="_blank" rel="noreferrer"
+           style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#E8E8F5;text-decoration:none;">
           <span style="font-size:0.88rem;">${paper.title}</span>
           <span style="color:#4D9EFF;font-size:0.82rem;">Open ↗</span>
         </a>
@@ -526,13 +529,14 @@ function injectParentTabData(report, student) {
     }
   }
 
-  // ── Weak/Strong topics ──
+  // ── Weak / strong topics ────────────────────────────────────────────────────
   const weakWrap = document.getElementById('parentWeakTopics');
   if (weakWrap) {
     weakWrap.innerHTML = weakTopics.length
       ? weakTopics.map(t => `<span style="display:inline-block;margin:3px;padding:4px 12px;border-radius:50px;background:rgba(255,45,120,0.12);color:#FF2D78;font-size:0.78rem;font-weight:700;">${t}</span>`).join('')
       : '<span style="color:var(--muted);font-size:0.88rem;">No weak topics identified yet.</span>';
   }
+
   const strongWrap = document.getElementById('parentStrongTopics');
   if (strongWrap) {
     strongWrap.innerHTML = strongTopics.length
@@ -549,7 +553,6 @@ window.addEventListener('load', () => {
     setupParentDashboard();
   }
 });
-
 
 
 
