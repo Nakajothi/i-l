@@ -389,6 +389,19 @@ function ensureParentExtraWidgets() {
     `;
     parentTab.appendChild(topicTags);
   }
+
+  if (!document.getElementById('parentTimetableSummary')) {
+    const timetable = document.createElement('div');
+    timetable.className = 'dash-widget';
+    timetable.id = 'parentTimetableWidget';
+    timetable.innerHTML = `
+      <h4>📅 Study Routine Status</h4>
+      <div id="parentTimetableSummary" style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">Timetable completion status will appear here.</div>
+      <div id="parentTimetableProgress"></div>
+      <div class="dash-updated" id="parentTimetableUpdated">Last updated: --</div>
+    `;
+    parentTab.appendChild(timetable);
+  }
 }
 
 // ── CORE FIX: injectParentTabData now accepts the raw API response directly ──
@@ -413,6 +426,7 @@ function injectParentTabData(report, student) {
   const weakTopics    = normalizedReport.weakTopics    || [];
   const strongTopics  = normalizedReport.strongTopics  || [];
   const latestAssessment = normalizedReport.latestAssessment || null;
+  const weeklySummary = normalizedReport.weeklySummary || null;
   const now = new Date();
 
   // ── Attendance ──────────────────────────────────────────────────────────────
@@ -429,6 +443,11 @@ function injectParentTabData(report, student) {
   setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No fee entries yet');
   setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
   setElementText('parentFeePending', `Rs ${feeSummary?.pending  || 0}`);
+  const feeLastPaid = document.getElementById('parentFeeLastPaid');
+  if (feeLastPaid) {
+    const lastPayment = Array.isArray(feeSummary?.payments) && feeSummary.payments.length ? feeSummary.payments[0] : null;
+    feeLastPaid.innerHTML = `<span class="metric-label">Last Paid</span><span class="metric-value">${lastPayment ? `${lastPayment.paid_on || '-'} • Rs ${lastPayment.amount_paid || 0}` : '-'}</span>`;
+  }
   setUpdatedLabel('parentFeeUpdated', now);
 
   // ── Weekly tests ────────────────────────────────────────────────────────────
@@ -445,6 +464,29 @@ function injectParentTabData(report, student) {
       `).join('');
     }
     setUpdatedLabel('parentWeeklyTestsUpdated', now);
+  }
+
+  const timetableSummaryEl = document.getElementById('parentTimetableSummary');
+  const timetableProgressEl = document.getElementById('parentTimetableProgress');
+  if (timetableSummaryEl && timetableProgressEl) {
+    const completed = Number(weeklySummary?.timetable?.completed || 0);
+    const total = Number(weeklySummary?.timetable?.total || 0);
+    const percentage = Number(weeklySummary?.timetable?.percentage || 0);
+    timetableSummaryEl.textContent = total
+      ? `${completed}/${total} planned study slots completed this week`
+      : 'No timetable completion data yet.';
+    timetableProgressEl.innerHTML = total ? `
+      <div style="padding:14px 16px;border-radius:16px;background:rgba(13,13,26,0.55);border:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;font-size:0.84rem;">
+          <span style="color:var(--muted);">Weekly completion</span>
+          <strong style="color:${percentage >= 75 ? '#00E5A0' : percentage >= 40 ? '#FFD166' : '#FF2D78'}">${percentage}%</strong>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,0.07);border-radius:999px;overflow:hidden;">
+          <div style="height:100%;width:${Math.max(0, Math.min(100, percentage))}%;background:${percentage >= 75 ? 'linear-gradient(90deg,#00E5A0,#7FFFD4)' : percentage >= 40 ? 'linear-gradient(90deg,#FFD166,#FFE29A)' : 'linear-gradient(90deg,#FF2D78,#FF7BA7)'};border-radius:999px;"></div>
+        </div>
+      </div>
+    ` : '<span style="color:var(--muted);font-size:0.88rem;">Timetable completion will appear after the student starts marking completed slots.</span>';
+    setUpdatedLabel('parentTimetableUpdated', now);
   }
 
   // ── MCQ performance ─────────────────────────────────────────────────────────
