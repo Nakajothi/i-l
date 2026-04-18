@@ -565,8 +565,8 @@ section{padding:56px 14px;}
       <p>Quick class-specific quiz. AI pinpoints exactly where you're losing marks and gives targeted exercises to fix the gap.</p>
       <span class="ai-badge">Take Diagnostic Test &#8594;</span>
     </div>
-    <div class="ai-card animate-in role-student-only" onclick="document.getElementById('dashboards')?.scrollIntoView({behavior:'smooth'}); document.getElementById('parentDashTab')?.click();">
-      <div class="ai-icon purple">&#128202;</div><h3>Parent Report View</h3>
+    <div class="ai-card animate-in role-student-only" onclick="document.getElementById('dashboards')?.scrollIntoView({behavior:'smooth'}); document.getElementById('studentDashTab')?.click();">
+      <div class="ai-icon purple">&#128202;</div><h3>Student Progress View</h3>
       <p>Open a parent-friendly report from the student account itself — attendance, fees, tests, MCQ results and topic insights in one place.</p>
       <span class="ai-badge">Open Parent Report &#8594;</span>
     </div>
@@ -590,7 +590,6 @@ section{padding:56px 14px;}
   <div class="animate-in">
     <div class="dash-tabs">
       <button class="dash-tab active role-student-only" id="studentDashTab" onclick="switchTab('student',this)">&#127891; Student Dashboard</button>
-      <button class="dash-tab role-student-only" id="parentDashTab" onclick="switchTab('parent',this)">&#128106; Parent Report</button>
       <button class="dash-tab role-teacher-only" id="teacherDashTab" onclick="switchTab('teacher',this)">&#128105;&#8205;&#127979; Teacher Dashboard</button>
     </div>
     <div class="dash-content active role-student-only" id="tab-student">
@@ -609,11 +608,13 @@ section{padding:56px 14px;}
     <div class="dash-updated" id="studentStreakUpdated">Last updated: --</div>
   </div>
   <div class="dash-widget student-grid-card">
-    <h4>&#128200; Topic Progress</h4>
-    <div class="progress-bar-wrap"><div class="progress-label"><span>Algebra</span><span>85%</span></div><div class="progress-bar"><div class="progress-fill pink" style="width:85%"></div></div></div>
-    <div class="progress-bar-wrap"><div class="progress-label"><span>Trigonometry</span><span>62%</span></div><div class="progress-bar"><div class="progress-fill blue" style="width:62%"></div></div></div>
-    <div class="progress-bar-wrap"><div class="progress-label"><span>Calculus</span><span>48%</span></div><div class="progress-bar"><div class="progress-fill purple" style="width:48%"></div></div></div>
-    <div class="progress-bar-wrap"><div class="progress-label"><span>Statistics</span><span>76%</span></div><div class="progress-bar"><div class="progress-fill green" style="width:76%"></div></div></div>
+    <h4>&#128179; Fee Summary</h4>
+    <div class="metric-row"><span class="metric-label">Class</span><span class="metric-value" id="parentFeeBatch">Class --</span></div>
+    <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value up" id="parentFeeStatus">Awaiting update</span></div>
+    <div class="metric-row"><span class="metric-label">Paid</span><span class="metric-value" id="parentFeePaid">Rs 0</span></div>
+    <div class="metric-row"><span class="metric-label">Pending</span><span class="metric-value" id="parentFeePending">Rs 0</span></div>
+    <div id="parentFeeLastPaid" class="metric-row"><span class="metric-label">Last Paid</span><span class="metric-value">-</span></div>
+    <div class="dash-updated" id="parentFeeUpdated">Last updated: --</div>
   </div>
   <div class="dash-widget student-grid-card">
     <h4>&#128197; Today's Timetable</h4>
@@ -622,57 +623,17 @@ section{padding:56px 14px;}
     </div>
   </div>
   <div class="dash-widget student-grid-card">
-    <h4>&#9888;&#65039; Weak Topic Alerts</h4>
-    <div class="alert-pill pink"><div class="alert-title pink">Integration by Parts</div><div class="alert-desc">Score below 50% in last 2 tests. Focus today!</div></div>
-    <div class="alert-pill blue"><div class="alert-title blue">Complex Numbers</div><div class="alert-desc">3 practice problems recommended before Friday.</div></div>
-  </div>
-  <div class="dash-widget student-doubts-card">
-    <div class="student-doubts-head">
-      <div>
-        <div class="student-doubts-title">&#127775; Doubt Replies</div>
-        <div class="student-doubts-note">Teacher answers will appear under your question and as quick popups near the icon.</div>
-      </div>
-    </div>
-    <div class="doubt-list" id="studentDoubtList"></div>
-  </div>
-</div><div id="doubtPopupStack" class="doubt-popup-stack role-student-only" aria-live="polite"></div><div class="dash-content role-student-only" id="tab-parent">
-  <div class="dash-widget">
-    <h4>&#9989; Attendance</h4>
-    <div class="metric-row"><span class="metric-label">This Month</span><span class="metric-value up" id="parentAttendanceMonth">0 / 0 days</span></div>
-    <div class="metric-row"><span class="metric-label">Overall %</span><span class="metric-value up" id="parentAttendanceOverall">0%</span></div>
-    <div class="metric-row"><span class="metric-label">Student</span><span class="metric-value" id="parentAttendanceStudent">Linked student</span></div>
-    <div style="margin-top:14px;">
-      <div class="progress-bar-wrap">
-        <div class="progress-label"><span>Attendance</span><span id="parentAttendanceProgressLabel">0%</span></div>
-        <div class="progress-bar"><div class="progress-fill green" id="parentAttendanceProgress" style="width:0%"></div></div>
-      </div>
-    </div>
-    <div class="dash-updated" id="parentAttendanceUpdated">Last updated: --</div>
-  </div>
-
-  <div class="dash-widget">
-    <h4>&#128179; Fee Summary</h4>
-    <div class="metric-row"><span class="metric-label">Batch</span><span class="metric-value" id="parentFeeBatch">Linked batch</span></div>
-    <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value up" id="parentFeeStatus">Awaiting update</span></div>
-    <div class="metric-row"><span class="metric-label">Paid</span><span class="metric-value" id="parentFeePaid">Rs 0</span></div>
-    <div class="metric-row"><span class="metric-label">Pending</span><span class="metric-value" id="parentFeePending">Rs 0</span></div>
-    <div id="parentFeeLastPaid" class="metric-row"><span class="metric-label">Last Paid</span><span class="metric-value">-</span></div>
-    <div class="dash-updated" id="parentFeeUpdated">Last updated: --</div>
-  </div>
-
-  <div class="dash-widget">
-    <h4>&#128200; Topic Performance</h4>
-    <div id="parentTopicProgress">
-      <div style="color:var(--muted);font-size:0.88rem;">Login as parent to see topic-wise scores from the latest assessment.</div>
-    </div>
-  </div>
-
-  <div class="dash-widget">
     <h4>&#128203; Weekly Test Marks</h4>
     <div id="parentWeeklyTests" style="color:var(--muted);font-size:0.88rem;">Weekly test marks will appear here once teachers enter them.</div>
+    <div class="dash-updated" id="parentWeeklyTestsUpdated">Last updated: --</div>
   </div>
-
-  <div class="dash-widget">
+  <div class="dash-widget student-grid-card">
+    <h4>&#128200; Topic Performance</h4>
+    <div id="parentTopicProgress">
+      <div style="color:var(--muted);font-size:0.88rem;">Topic-wise progress will appear here after your latest assessment.</div>
+    </div>
+  </div>
+  <div class="dash-widget student-grid-card">
     <h4>&#127919; Strengths &amp; Weak Areas</h4>
     <div style="margin-bottom:12px;">
       <div style="font-size:0.75rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Strong Topics</div>
@@ -683,24 +644,21 @@ section{padding:56px 14px;}
       <div id="parentWeakTopics"><span style="color:#8888AA;font-size:0.88rem;">Loading...</span></div>
     </div>
   </div>
-
-  <div class="dash-widget" style="grid-column: 1 / -1;">
-    <h4>&#128221; Daily MCQ Performance</h4>
-    <div id="parentMcqSummary" style="color:var(--muted);font-size:0.88rem;margin-bottom:12px;">Daily MCQ summary will appear here.</div>
-    <div id="parentMcqList"></div>
+  <div class="dash-widget student-doubts-card">
+    <div class="student-doubts-head">
+      <div>
+        <div class="student-doubts-title">&#127775; Doubt Replies</div>
+        <div class="student-doubts-note">Teacher answers will appear under your question and as quick popups near the icon.</div>
+      </div>
+    </div>
+    <div class="doubt-list" id="studentDoubtList"></div>
   </div>
-
-  <div class="dash-widget" style="grid-column: 1 / -1;">
-    <h4>&#128196; Question Papers</h4>
-    <div id="parentQuestionPapers" style="color:var(--muted);font-size:0.88rem;">No question papers posted yet.</div>
-  </div>
-
-</div><div class="dash-content role-teacher-only" id="tab-teacher">
+</div><div id="doubtPopupStack" class="doubt-popup-stack role-student-only" aria-live="polite"></div><div class="dash-content role-student-only" id="tab-parent" style="display:none;"></div><div class="dash-content role-teacher-only" id="tab-teacher">
       <div class="dash-widget" style="grid-column:1 / -1; order:1;">
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;">
           <div>
             <h4>&#128105;&#8205;&#127979; Teacher Dashboard</h4>
-            <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Mark attendance for all registered students and automatically generate the academy attendance sheet.</p>
+              <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Mark attendance for all registered students and save it directly to the academy database.</p>
           </div>
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
             <div class="form-group" style="margin:0;min-width:190px;">
@@ -711,7 +669,6 @@ section{padding:56px 14px;}
           </div>
         </div>
         <div id="teacherAttendanceMessage" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(77,158,255,0.25);color:#E8E8F5;"></div>
-        <div id="teacherSheetInfo" style="margin-top:12px;color:var(--muted);font-size:0.86rem;">Attendance sheet will be generated after saving.</div>
         <div class="dash-actions teacher-shortcuts" style="margin-top:12px;">
           <button class="btn-secondary" onclick="document.getElementById('teacherWeeklyTestTitle')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Weekly Tests</span></button>
           <button class="btn-secondary" onclick="document.getElementById('teacherFeeDate')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Fees</span></button>
@@ -817,7 +774,7 @@ section{padding:56px 14px;}
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;">
           <div>
             <h4>Weekly Test Entry Report</h4>
-            <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Enter marks manually for each student with the test date. These marks will appear in the parent report.</p>
+              <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Enter marks manually for each student with the test date. These marks will appear in the student dashboard.</p>
           </div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div class="form-group" style="margin:0;min-width:220px;"><label>Test Title</label><input type="text" id="teacherWeeklyTestTitle" placeholder="Weekly Test 3" /></div>
@@ -838,7 +795,7 @@ section{padding:56px 14px;}
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;">
           <div>
             <h4>Fees Entry Console</h4>
-            <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Enter the fee amount paid by each student with date. Pending fees will automatically show in the parent fee summary.</p>
+              <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Enter the fee amount paid by each student with date. Pending fees will automatically show in the student dashboard fee summary.</p>
           </div>
           <div class="form-group" style="margin:0;min-width:180px;"><label>Payment Date</label><input type="date" id="teacherFeeDate" /></div>
         </div>
