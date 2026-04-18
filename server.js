@@ -454,225 +454,186 @@ async function sendOtpSms(mobileDigits, otp) {
 }
 
 // ── DATABASE SETUP ──────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────
-// REPLACE the section in server.js that starts with:
-//
-//   ensureSheetsDir();
-//   db.exec(`CREATE TABLE IF NOT EXISTS students ...`);
-//
-// ... all the way down to the app.listen() call,
-// with this async IIFE wrapper:
-// ─────────────────────────────────────────────────────────────────
+ensureSheetsDir();
+db.exec(`
+  CREATE TABLE IF NOT EXISTS students (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT    NOT NULL,
+    email       TEXT    UNIQUE NOT NULL,
+    password    TEXT    NOT NULL,
+    google_sub  TEXT,
+    class       TEXT    NOT NULL,
+    subject     TEXT    DEFAULT 'maths',
+    approval_status TEXT DEFAULT 'accepted',
+    mobile      TEXT    NOT NULL,
+    board       TEXT    DEFAULT 'state',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS parents (
+    id          SERIAL PRIMARY KEY,
+    mobile      TEXT    UNIQUE NOT NULL,
+    otp         TEXT,
+    otp_expiry  TIMESTAMP,
+    student_id  INTEGER REFERENCES students(id),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS assessments (
+    id            SERIAL PRIMARY KEY,
+    student_id    INTEGER NOT NULL REFERENCES students(id),
+    class         TEXT    NOT NULL,
+    score         INTEGER NOT NULL,
+    total         INTEGER NOT NULL,
+    topic_scores  TEXT    NOT NULL,
+    weak_topics   TEXT,
+    strong_topics TEXT,
+    taken_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS chat_sessions (
+    id          SERIAL PRIMARY KEY,
+    student_id  INTEGER REFERENCES students(id),
+    session_key TEXT    NOT NULL UNIQUE,
+    messages    TEXT    NOT NULL DEFAULT '[]',
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS timetables (
+    id          SERIAL PRIMARY KEY,
+    student_id  INTEGER NOT NULL REFERENCES students(id),
+    schedule    TEXT    NOT NULL,
+    weak_topics TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS teachers (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT    NOT NULL,
+    email       TEXT    UNIQUE NOT NULL,
+    password    TEXT    NOT NULL,
+    google_sub  TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS timetable_completions (
+    id           SERIAL PRIMARY KEY,
+    timetable_id INTEGER NOT NULL REFERENCES timetables(id),
+    student_id   INTEGER NOT NULL REFERENCES students(id),
+    slot_day     TEXT    NOT NULL,
+    slot_time    TEXT    NOT NULL,
+    topic        TEXT    NOT NULL,
+    completed    INTEGER NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(timetable_id, student_id, slot_day, slot_time, topic)
+  );
+  CREATE TABLE IF NOT EXISTS daily_mcqs (
+    id              SERIAL PRIMARY KEY,
+    teacher_id      INTEGER REFERENCES teachers(id),
+    title           TEXT    NOT NULL,
+    batch_title     TEXT,
+    question_no     INTEGER DEFAULT 1,
+    question        TEXT,
+    question_image  TEXT,
+    options         TEXT    NOT NULL,
+    correct_index   INTEGER NOT NULL,
+    class_scope     TEXT    DEFAULT 'all',
+    active          INTEGER NOT NULL DEFAULT 1,
+    available_until TIMESTAMP,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS daily_mcq_submissions (
+    id             SERIAL PRIMARY KEY,
+    mcq_id         INTEGER NOT NULL REFERENCES daily_mcqs(id),
+    student_id     INTEGER NOT NULL REFERENCES students(id),
+    selected_index INTEGER NOT NULL,
+    is_correct     INTEGER NOT NULL DEFAULT 0,
+    submitted_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(mcq_id, student_id)
+  );
+  CREATE TABLE IF NOT EXISTS question_papers (
+    id            SERIAL PRIMARY KEY,
+    teacher_id    INTEGER REFERENCES teachers(id),
+    title         TEXT    NOT NULL,
+    class_scope   TEXT    DEFAULT 'all',
+    resource_type TEXT    DEFAULT 'pdf',
+    resource_url  TEXT    NOT NULL,
+    posted_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS weekly_tests (
+    id             SERIAL PRIMARY KEY,
+    teacher_id     INTEGER REFERENCES teachers(id),
+    student_id     INTEGER NOT NULL REFERENCES students(id),
+    title          TEXT    NOT NULL,
+    test_date      TEXT    NOT NULL,
+    marks_obtained DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_marks    DOUBLE PRECISION NOT NULL DEFAULT 100,
+    notes          TEXT,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS fee_payments (
+    id          SERIAL PRIMARY KEY,
+    teacher_id  INTEGER REFERENCES teachers(id),
+    student_id  INTEGER NOT NULL REFERENCES students(id),
+    amount_paid DOUBLE PRECISION NOT NULL DEFAULT 0,
+    paid_on     TEXT    NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS attendance (
+    id          SERIAL PRIMARY KEY,
+    student_id  INTEGER NOT NULL REFERENCES students(id),
+    date        TEXT    NOT NULL,
+    status      TEXT    DEFAULT 'present',
+    UNIQUE(student_id, date)
+  );
+  CREATE TABLE IF NOT EXISTS doubts (
+    id             SERIAL PRIMARY KEY,
+    student_id     INTEGER NOT NULL REFERENCES students(id),
+    teacher_id     INTEGER REFERENCES teachers(id),
+    question_text  TEXT    NOT NULL,
+    question_image TEXT,
+    answer_text    TEXT,
+    answer_image   TEXT,
+    status         TEXT    DEFAULT 'open',
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    answered_at    TIMESTAMP
+  );
+`);
 
-(async () => {
-  // ── WAIT FOR DATABASE ───────────────────────────────────────────
-  console.log('[DB] Waiting for PostgreSQL connection...');
-  let dbReady = false;
-  for (let attempt = 1; attempt <= 10; attempt++) {
-    try {
-      db.prepare('SELECT 1').get();
-      dbReady = true;
-      console.log('[DB] Connected successfully.');
-      break;
-    } catch (e) {
-      console.log(`[DB] Not ready yet (attempt ${attempt}/10) — ${e.message}`);
-      await new Promise(r => setTimeout(r, 3000));
-    }
-  }
-  if (!dbReady) {
-    console.error('[DB] Could not connect to PostgreSQL after 10 attempts.');
-    console.error('[DB] Check that DATABASE_URL is set to the INTERNAL connection string,');
-    console.error('[DB] and that the web service and database are in the same Render region.');
-    process.exit(1);
-  }
+// Safe column additions — IF NOT EXISTS prevents errors on redeploy
+[
+  "ALTER TABLE students  ADD COLUMN IF NOT EXISTS google_sub       TEXT",
+  "ALTER TABLE students  ADD COLUMN IF NOT EXISTS subject          TEXT DEFAULT 'maths'",
+  "ALTER TABLE students  ADD COLUMN IF NOT EXISTS approval_status  TEXT DEFAULT 'accepted'",
+  "ALTER TABLE teachers  ADD COLUMN IF NOT EXISTS google_sub       TEXT",
+  "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS batch_title     TEXT",
+  "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_no     INTEGER DEFAULT 1",
+  "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS available_until TIMESTAMP",
+  "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_image  TEXT",
+].forEach((sql) => { try { db.prepare(sql).run(); } catch (e) { /* already exists — ignore */ } });
 
-  // ── SCHEMA SETUP ───────────────────────────────────────────────
-  ensureSheetsDir();
+// PostgreSQL already treats NULLs as distinct in unique indexes.
+try {
+  db.prepare(
+    USING_POSTGRES
+      ? 'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub)'
+      : 'CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub) WHERE google_sub IS NOT NULL'
+  ).run();
+} catch (e) { /* ignore */ }
+try {
+  db.prepare(
+    USING_POSTGRES
+      ? 'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub)'
+      : 'CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub) WHERE google_sub IS NOT NULL'
+  ).run();
+} catch (e) { /* ignore */ }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS students (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT    NOT NULL,
-      email       TEXT    UNIQUE NOT NULL,
-      password    TEXT    NOT NULL,
-      google_sub  TEXT,
-      class       TEXT    NOT NULL,
-      subject     TEXT    DEFAULT 'maths',
-      approval_status TEXT DEFAULT 'accepted',
-      mobile      TEXT    NOT NULL,
-      board       TEXT    DEFAULT 'state',
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS parents (
-      id          SERIAL PRIMARY KEY,
-      mobile      TEXT    UNIQUE NOT NULL,
-      otp         TEXT,
-      otp_expiry  TIMESTAMP,
-      student_id  INTEGER REFERENCES students(id),
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS assessments (
-      id            SERIAL PRIMARY KEY,
-      student_id    INTEGER NOT NULL REFERENCES students(id),
-      class         TEXT    NOT NULL,
-      score         INTEGER NOT NULL,
-      total         INTEGER NOT NULL,
-      topic_scores  TEXT    NOT NULL,
-      weak_topics   TEXT,
-      strong_topics TEXT,
-      taken_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS chat_sessions (
-      id          SERIAL PRIMARY KEY,
-      student_id  INTEGER REFERENCES students(id),
-      session_key TEXT    NOT NULL UNIQUE,
-      messages    TEXT    NOT NULL DEFAULT '[]',
-      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS timetables (
-      id          SERIAL PRIMARY KEY,
-      student_id  INTEGER NOT NULL REFERENCES students(id),
-      schedule    TEXT    NOT NULL,
-      weak_topics TEXT,
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS teachers (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT    NOT NULL,
-      email       TEXT    UNIQUE NOT NULL,
-      password    TEXT    NOT NULL,
-      google_sub  TEXT,
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS timetable_completions (
-      id           SERIAL PRIMARY KEY,
-      timetable_id INTEGER NOT NULL REFERENCES timetables(id),
-      student_id   INTEGER NOT NULL REFERENCES students(id),
-      slot_day     TEXT    NOT NULL,
-      slot_time    TEXT    NOT NULL,
-      topic        TEXT    NOT NULL,
-      completed    INTEGER NOT NULL DEFAULT 0,
-      updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(timetable_id, student_id, slot_day, slot_time, topic)
-    );
-    CREATE TABLE IF NOT EXISTS daily_mcqs (
-      id              SERIAL PRIMARY KEY,
-      teacher_id      INTEGER REFERENCES teachers(id),
-      title           TEXT    NOT NULL,
-      batch_title     TEXT,
-      question_no     INTEGER DEFAULT 1,
-      question        TEXT,
-      question_image  TEXT,
-      options         TEXT    NOT NULL,
-      correct_index   INTEGER NOT NULL,
-      class_scope     TEXT    DEFAULT 'all',
-      active          INTEGER NOT NULL DEFAULT 1,
-      available_until TIMESTAMP,
-      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS daily_mcq_submissions (
-      id             SERIAL PRIMARY KEY,
-      mcq_id         INTEGER NOT NULL REFERENCES daily_mcqs(id),
-      student_id     INTEGER NOT NULL REFERENCES students(id),
-      selected_index INTEGER NOT NULL,
-      is_correct     INTEGER NOT NULL DEFAULT 0,
-      submitted_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(mcq_id, student_id)
-    );
-    CREATE TABLE IF NOT EXISTS question_papers (
-      id            SERIAL PRIMARY KEY,
-      teacher_id    INTEGER REFERENCES teachers(id),
-      title         TEXT    NOT NULL,
-      class_scope   TEXT    DEFAULT 'all',
-      resource_type TEXT    DEFAULT 'pdf',
-      resource_url  TEXT    NOT NULL,
-      posted_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS weekly_tests (
-      id             SERIAL PRIMARY KEY,
-      teacher_id     INTEGER REFERENCES teachers(id),
-      student_id     INTEGER NOT NULL REFERENCES students(id),
-      title          TEXT    NOT NULL,
-      test_date      TEXT    NOT NULL,
-      marks_obtained DOUBLE PRECISION NOT NULL DEFAULT 0,
-      total_marks    DOUBLE PRECISION NOT NULL DEFAULT 100,
-      notes          TEXT,
-      created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS fee_payments (
-      id          SERIAL PRIMARY KEY,
-      teacher_id  INTEGER REFERENCES teachers(id),
-      student_id  INTEGER NOT NULL REFERENCES students(id),
-      amount_paid DOUBLE PRECISION NOT NULL DEFAULT 0,
-      paid_on     TEXT    NOT NULL,
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS attendance (
-      id          SERIAL PRIMARY KEY,
-      student_id  INTEGER NOT NULL REFERENCES students(id),
-      date        TEXT    NOT NULL,
-      status      TEXT    DEFAULT 'present',
-      UNIQUE(student_id, date)
-    );
-    CREATE TABLE IF NOT EXISTS doubts (
-      id             SERIAL PRIMARY KEY,
-      student_id     INTEGER NOT NULL REFERENCES students(id),
-      teacher_id     INTEGER REFERENCES teachers(id),
-      question_text  TEXT    NOT NULL,
-      question_image TEXT,
-      answer_text    TEXT,
-      answer_image   TEXT,
-      status         TEXT    DEFAULT 'open',
-      created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      answered_at    TIMESTAMP
-    );
-  `);
+seedDefaultTeacher();
+refreshSheets();
 
-  // Safe column additions
-  [
-    "ALTER TABLE students  ADD COLUMN IF NOT EXISTS google_sub       TEXT",
-    "ALTER TABLE students  ADD COLUMN IF NOT EXISTS subject          TEXT DEFAULT 'maths'",
-    "ALTER TABLE students  ADD COLUMN IF NOT EXISTS approval_status  TEXT DEFAULT 'accepted'",
-    "ALTER TABLE teachers  ADD COLUMN IF NOT EXISTS google_sub       TEXT",
-    "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS batch_title     TEXT",
-    "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_no     INTEGER DEFAULT 1",
-    "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS available_until TIMESTAMP",
-    "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_image  TEXT",
-  ].forEach((sql) => { try { db.prepare(sql).run(); } catch (e) { /* already exists */ } });
+// ── MIDDLEWARE ───────────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.static(__dirname));
 
-  try {
-    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_students_google_sub ON students (google_sub)').run();
-  } catch (e) { /* ignore */ }
-  try {
-    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google_sub ON teachers (google_sub)').run();
-  } catch (e) { /* ignore */ }
+const limiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
+const otpLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: 'Too many OTP requests. Wait 1 minute.' } });
+app.use('/api/', limiter);
 
-  seedDefaultTeacher();
-  refreshSheets();
-
-  // ── MIDDLEWARE ──────────────────────────────────────────────────
-  app.use(cors());
-  app.use(express.json());
-  app.use(express.static(__dirname));
-
-  const limiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
-  app.use('/api/', limiter);
-
-  // ── ALL YOUR EXISTING ROUTES GO HERE (unchanged) ────────────────
-  // (app.post('/api/teacher/login', ...) etc — keep everything as-is)
-  // ...
-
-  // ── CATCH-ALL ───────────────────────────────────────────────────
-  app.use('/api/*', (req, res) => {
-    res.status(404).json({ error: 'API route not found: ' + req.path });
-  });
-
-  // ── START SERVER ────────────────────────────────────────────────
-  app.listen(PORT, () => {
-    console.log(`I LEARN ACADEMY running on port ${PORT}`);
-  });
-
-})();
 // ── AUTH MIDDLEWARE ──────────────────────────────────────────
 function authStudent(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
@@ -853,7 +814,7 @@ app.get('/api/student/profile', authStudent, (req, res) => {
 // ============================================================
 //  PARENT ROUTES
 // ============================================================
-app.post('/api/parent/send-otp', Limiter, async (req, res) => {
+app.post('/api/parent/send-otp', otpLimiter, async (req, res) => {
   return res.status(410).json({ error: 'Parent OTP login has been removed. Please use Google login with the linked student Gmail.' });
   const { mobile } = req.body;
   if (!mobile) return res.status(400).json({ error: 'Mobile number required' });
