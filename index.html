@@ -565,10 +565,10 @@ section{padding:56px 14px;}
       <p>Quick class-specific quiz. AI pinpoints exactly where you're losing marks and gives targeted exercises to fix the gap.</p>
       <span class="ai-badge">Take Diagnostic Test &#8594;</span>
     </div>
-    <div class="ai-card animate-in role-parent-only" onclick="location.href='ai-parentreport.html'">
-      <div class="ai-icon purple">&#128202;</div><h3>Smart Parent Reports</h3>
-      <p>Parents get weekly AI-generated reports — attendance, test scores, topic insights and actionable tips to support their child.</p>
-      <span class="ai-badge">View Sample Report &#8594;</span>
+    <div class="ai-card animate-in role-student-only" onclick="document.getElementById('dashboards')?.scrollIntoView({behavior:'smooth'}); document.getElementById('parentDashTab')?.click();">
+      <div class="ai-icon purple">&#128202;</div><h3>Parent Report View</h3>
+      <p>Open a parent-friendly report from the student account itself — attendance, fees, tests, MCQ results and topic insights in one place.</p>
+      <span class="ai-badge">Open Parent Report &#8594;</span>
     </div>
   </div>
 </section>
@@ -578,7 +578,7 @@ section{padding:56px 14px;}
   <div class="section-header animate-in">
     <div class="section-tag">Smart Dashboards</div>
     <h2 class="section-title">Everything at a Glance</h2>
-    <p class="section-sub">Students and parents get separate personalised dashboards — track progress, attendance, fees and more.</p>
+    <p class="section-sub">Students get both their own dashboard and a parent-ready report view — track progress, attendance, fees and more from one login.</p>
     </div>
   <div class="dash-welcome animate-in" id="dashboardWelcome">
     <div>
@@ -590,7 +590,7 @@ section{padding:56px 14px;}
   <div class="animate-in">
     <div class="dash-tabs">
       <button class="dash-tab active role-student-only" id="studentDashTab" onclick="switchTab('student',this)">&#127891; Student Dashboard</button>
-      <button class="dash-tab role-parent-only" id="parentDashTab" onclick="switchTab('parent',this)">&#128106; Parent Dashboard</button>
+      <button class="dash-tab role-student-only" id="parentDashTab" onclick="switchTab('parent',this)">&#128106; Parent Report</button>
       <button class="dash-tab role-teacher-only" id="teacherDashTab" onclick="switchTab('teacher',this)">&#128105;&#8205;&#127979; Teacher Dashboard</button>
     </div>
     <div class="dash-content active role-student-only" id="tab-student">
@@ -635,7 +635,7 @@ section{padding:56px 14px;}
     </div>
     <div class="doubt-list" id="studentDoubtList"></div>
   </div>
-</div><div id="doubtPopupStack" class="doubt-popup-stack role-student-only" aria-live="polite"></div><div class="dash-content role-parent-only" id="tab-parent">
+</div><div id="doubtPopupStack" class="doubt-popup-stack role-student-only" aria-live="polite"></div><div class="dash-content role-student-only" id="tab-parent">
   <div class="dash-widget">
     <h4>&#9989; Attendance</h4>
     <div class="metric-row"><span class="metric-label">This Month</span><span class="metric-value up" id="parentAttendanceMonth">0 / 0 days</span></div>
@@ -971,7 +971,6 @@ section{padding:56px 14px;}
     <div id="loginErrorMessage" class="otp-error" style="margin:10px 0 14px;"></div>
     <div class="login-tabs">
       <button class="ltab active" id="ltab-student" onclick="setLoginType('student')">&#127891; Student</button>
-      <button class="ltab" id="ltab-parent" onclick="setLoginType('parent')">&#128106; Parent</button>
       <button class="ltab" id="ltab-teacher" onclick="setLoginType('teacher')">&#128105;&#8205;&#127979; Teacher</button>
     </div>
  
@@ -1003,16 +1002,6 @@ section{padding:56px 14px;}
 </div>
 
  
-    <!-- PARENT: Google Sign-In -->
-    <div id="loginParentFields" style="display:none;">
-      <div class="otp-banner blue">Use the same Gmail linked to the student account. Parent access is Google-only and will load the full linked student details.</div>
-      <div style="margin:16px 0 10px;display:flex;justify-content:center;">
-        <div class="g_id_signin" data-type="standard" data-shape="pill" data-theme="filled_blue" data-text="continue_with" data-size="large" data-logo_alignment="left" data-width="320"></div>
-      </div>
-      <p class="modal-footer-link" style="margin-top:8px;">
-        <a href="#" onclick="setLoginType('student');return false;">Switch to student login</a>
-      </p>
-    </div>
     <div id="loginTeacherFields" style="display:none;">
       <div class="otp-banner blue">Use only ilearntution@gmail.com to continue.</div>
       <div class="form-group">
@@ -1141,7 +1130,6 @@ section{padding:56px 14px;}
 
 </body>
 </html>
-
 
 
 
