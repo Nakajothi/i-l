@@ -68,8 +68,9 @@ function switchTab(tab, el) {
       loadStudentResources();
       loadStudentDoubts();
     });
-  } else if (tab === 'parent' && hasActiveParentSession()) {
-    refreshParentDashboard();
+  } else if (tab === 'parent' && (hasActiveStudentSession() || hasActiveParentSession())) {
+    if (hasActiveStudentSession()) refreshStudentParentDashboard();
+    else refreshParentDashboard();
   }
 }
 
@@ -147,7 +148,8 @@ function redirectToParentDashboard() {
   const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
   if (isHome) {
     updateHomeForSession();
-    refreshParentDashboard();
+    if (hasActiveStudentSession()) refreshStudentParentDashboard();
+    else refreshParentDashboard();
     const parentTab = document.getElementById('parentDashTab');
     if (parentTab) switchTab('parent', parentTab);
     document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
@@ -206,7 +208,6 @@ function setLoginType(type) {
   currentLoginType = type;
   const groups = {
     student: document.getElementById('loginStudentFields'),
-    parent: document.getElementById('loginParentFields'),
     teacher: document.getElementById('loginTeacherFields')
   };
   Object.entries(groups).forEach(([key, node]) => {
@@ -214,7 +215,7 @@ function setLoginType(type) {
     node.style.display = key === type ? 'flex' : 'none';
     if (key === type) node.style.flexDirection = 'column';
   });
-  ['student', 'parent', 'teacher'].forEach((key) => {
+  ['student', 'teacher'].forEach((key) => {
     document.getElementById('ltab-' + key)?.classList.toggle('active', key === type);
   });
 }
@@ -304,12 +305,6 @@ async function handleCredentialResponse(response) {
       closeLoginModal();
       localStorage.setItem('ilearn_teacher', JSON.stringify(data.teacher || {}));
       redirectToTeacherDashboard();
-      return;
-    }
-    if (currentLoginType === 'parent') {
-      const data = await API.loginParentWithGoogle(response.credential);
-      closeLoginModal();
-      redirectToParentDashboard();
       return;
     }
     const data = await API.loginStudentWithGoogle(response.credential);
@@ -688,12 +683,63 @@ async function refreshParentDashboard() {
   }
 }
 
+function buildStudentParentView(profile) {
+  const student = profile.student || {};
+  const latestAssessment = profile.latestAssessment || null;
+  const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
+  const weakTopics = latestAssessment?.weak_topics ? JSON.parse(latestAssessment.weak_topics || '[]') : [];
+  const strongTopics = latestAssessment?.strong_topics ? JSON.parse(latestAssessment.strong_topics || '[]') : [];
+  const dailyMcqSet = profile.dailyMcqSet || { questions: [] };
+  const recentMcqs = Array.isArray(dailyMcqSet.questions)
+    ? dailyMcqSet.questions.filter((item) => item.selected_index !== null && item.selected_index !== undefined)
+    : [];
+  const report = {
+    student,
+    latestAssessment,
+    attendance: profile.attendance || {},
+    totalAttendance: profile.totalAttendance || {},
+    attendanceSummary: profile.attendanceSummary || {},
+    weeklySummary: profile.weeklySummary || null,
+    dailyMcqSet,
+    questionPapers: profile.questionPapers || [],
+    weeklyTests: profile.weeklyTests || [],
+    feeSummary: profile.feeSummary || null,
+    mcqStreak: profile.mcqStreak || 0,
+    topicScores,
+    weakTopics,
+    strongTopics,
+    recentMcqs: profile.recentMcqs || recentMcqs
+  };
+  return { student, report, ...report };
+}
+
+async function refreshStudentParentDashboard() {
+  if (!hasActiveStudentSession()) return;
+  try {
+    const profile = getStoredProfileState('ilearn_student_profile');
+    if (!Object.keys(profile || {}).length) return;
+    const parentView = buildStudentParentView(profile);
+    localStorage.setItem('ilearn_parent_profile', JSON.stringify(parentView));
+    localStorage.setItem('ilearn_parent_student', JSON.stringify(parentView.student || {}));
+    if (typeof injectParentTabData === 'function') {
+      injectParentTabData(parentView.report, parentView.student);
+    }
+    updateDashboardAttendanceCards();
+    renderNavProfile();
+  } catch (err) {
+    console.warn('Student parent report refresh failed:', err.message || err);
+  }
+}
+
 async function refreshRoleData() {
   const role = getCurrentRole();
   try {
     if (role === 'student') {
       const profile = await API.getStudentProfile();
       localStorage.setItem('ilearn_student_profile', JSON.stringify(profile));
+      const parentView = buildStudentParentView(profile);
+      localStorage.setItem('ilearn_parent_profile', JSON.stringify(parentView));
+      localStorage.setItem('ilearn_parent_student', JSON.stringify(parentView.student || {}));
       try {
         const timetable = await API.getLatestTimetable();
         localStorage.setItem('ilearn_student_timetable', JSON.stringify(timetable));
@@ -837,9 +883,9 @@ function updateDashboardAttendanceCards() {
   }
  
   // ── Re-inject ALL parent tab widgets from cache (so tab-switch stays live) ──
-  if (role === 'parent' && Object.keys(parentApiResponse).length) {
+  if ((role === 'parent' || role === 'student') && Object.keys(parentApiResponse).length) {
     if (typeof injectParentTabData === 'function') {
-      injectParentTabData(parentApiResponse, parentStudent);
+      injectParentTabData(parentReport, parentStudent);
     }
   }
  
@@ -854,7 +900,7 @@ function updateHomeForSession() {
     el.style.display = (!role || role === 'student') ? '' : 'none';
   });
   document.querySelectorAll('.role-parent-only').forEach((el) => {
-    el.style.display = (!role || role === 'parent') ? '' : 'none';
+    el.style.display = role === 'parent' ? '' : 'none';
   });
   // IMPORTANT: for teacher role, force ALL role-teacher-only elements visible
   document.querySelectorAll('.role-teacher-only').forEach((el) => {
@@ -899,6 +945,7 @@ function updateHomeForSession() {
     }
   } else if (role === 'student') {
     if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
+    if (parentTab) { parentTab.style.display = 'inline-block'; }
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   } else if (role === 'parent') {
     if (parentTab) { parentTab.style.display = 'inline-block'; parentTab.classList.add('active'); }
@@ -1462,6 +1509,7 @@ window.addEventListener('load', async () => {
 
   } else if (role === 'student') {
     try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
+    try { await refreshStudentParentDashboard(); } catch (e) { console.warn('Student parent report refresh failed:', e.message); }
     try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
     try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
 
@@ -1470,6 +1518,8 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
+
+
 
 
 
