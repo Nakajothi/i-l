@@ -802,12 +802,14 @@ app.get('/api/student/profile', authStudent, (req, res) => {
   const weeklyTests      = getStudentWeeklyTests(studentId);
   const feeSummary       = buildFeeSummary(studentId, student.class);
   const mcqStreak        = getStudentMcqStreak(studentId);
+  const weeklySummary    = buildWeeklyStudentSummary(studentId);
+  const recentMcqs       = getRecentStudentMcqs(studentId);
   res.json({
     student, latestAssessment, latestTimetable,
     attendance: { present: monthAttendance.present },
     totalAttendance: { total: monthAttendance.total },
     attendanceSummary: { month: monthAttendance, overall: overallAttendance },
-    dailyMcqSet, questionPapers, weeklyTests, feeSummary, mcqStreak
+    dailyMcqSet, questionPapers, weeklyTests, feeSummary, mcqStreak, weeklySummary, recentMcqs
   });
 });
 
