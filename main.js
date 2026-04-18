@@ -760,6 +760,18 @@ async function refreshRoleData() {
       localStorage.setItem('ilearn_teacher', JSON.stringify(teacher));
     }
   } catch (err) {
+    if (role === 'student') {
+      const message = err.message || 'Could not load student profile.';
+      setElementText('studentAttendanceHint', message);
+      setElementText('parentFeeStatus', message.includes('blocked by the teacher') ? 'Blocked by teacher' : 'Update unavailable');
+      const studentStored = getStoredProfileState('ilearn_student');
+      if (studentStored?.class) {
+        setElementText('parentFeeBatch', `Class ${studentStored.class}`);
+      }
+      if (message.includes('blocked by the teacher') || message.includes('Session expired')) {
+        localStorage.removeItem('ilearn_student_profile');
+      }
+    }
     console.warn('Profile refresh skipped:', err.message || err);
   }
   updateDashboardAttendanceCards();
@@ -880,9 +892,10 @@ function updateDashboardAttendanceCards() {
     setUpdatedLabel('parentAttendanceUpdated', now);
   }
  
-  const feeSummary = parentReport?.feeSummary || null;
-  if (feeSummary || parentStudent?.class) {
-    setElementText('parentFeeBatch',   parentStudent?.class ? `Class ${parentStudent.class}` : 'Class --');
+  const feeSummary = parentReport?.feeSummary || studentProfile.feeSummary || null;
+  const feeStudent = parentStudent?.class ? parentStudent : (studentProfile.student || studentStored || {});
+  if (feeSummary || feeStudent?.class) {
+    setElementText('parentFeeBatch',   feeStudent?.class ? `Class ${feeStudent.class}` : 'Class --');
     const pendingAmt = Number(feeSummary?.pending || 0);
     setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
     setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
