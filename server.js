@@ -8,72 +8,14 @@ const express      = require('express');
 const cors         = require('cors');
 const bcrypt       = require('bcryptjs');
 const jwt          = require('jsonwebtoken');
-const fs           = require('fs');
 const { OAuth2Client } = require('google-auth-library');
 const path         = require('path');
 const rateLimit    = require('express-rate-limit');
-const { db, DATA_DIR, USING_POSTGRES } = require('./db');
+const { db, USING_POSTGRES } = require('./db');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const ALLOWED_TEACHER_EMAIL = 'ilearntution@gmail.com';
-const SHEETS_DIR       = path.join(DATA_DIR, 'sheets');
-const STUDENTS_SHEET   = path.join(SHEETS_DIR, 'student_profiles.csv');
-const PARENTS_SHEET    = path.join(SHEETS_DIR, 'parent_profiles.csv');
-const ATTENDANCE_SHEET = path.join(SHEETS_DIR, 'attendance_sheet.csv');
-
-function csvEscape(value) {
-  const text = value == null ? '' : String(value);
-  if (/[",\r\n]/.test(text)) return '"' + text.replace(/"/g, '""') + '"';
-  return text;
-}
-function writeCsv(filePath, headers, rows) {
-  const lines = [headers.join(',')].concat(
-    rows.map((row) => headers.map((h) => csvEscape(row[h])).join(','))
-  );
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
-}
-function ensureSheetsDir() {
-  if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
-  if (!fs.existsSync(SHEETS_DIR)) fs.mkdirSync(SHEETS_DIR, { recursive: true });
-}
-function exportProfileSheets() {
-  ensureSheetsDir();
-  try {
-    const students = db.prepare('SELECT id, name, email, class, mobile, board, created_at FROM students ORDER BY class, name').all();
-    writeCsv(STUDENTS_SHEET, ['id','name','email','class','mobile','board','created_at'], students);
-    const parents = db.prepare("SELECT p.id, p.mobile, p.student_id, COALESCE(s.name,'') AS student_name, COALESCE(s.class,'') AS student_class, p.created_at FROM parents p LEFT JOIN students s ON s.id = p.student_id ORDER BY s.class, s.name, p.mobile").all();
-    writeCsv(PARENTS_SHEET, ['id','mobile','student_id','student_name','student_class','created_at'], parents);
-  } catch (e) { console.warn('[exportProfileSheets]', e.message); }
-}
-function exportAttendanceSheet() {
-  ensureSheetsDir();
-  try {
-    const rows = db.prepare("SELECT s.id AS student_id, s.name AS student_name, s.class AS class, COALESCE(a.date,'') AS date, COALESCE(a.status,'') AS status FROM students s LEFT JOIN attendance a ON a.student_id = s.id ORDER BY s.class, s.name, a.date DESC").all();
-    writeCsv(ATTENDANCE_SHEET, ['student_id','student_name','class','date','status'], rows);
-  } catch (e) { console.warn('[exportAttendanceSheet]', e.message); }
-}
-function syncAttendanceFromSheet() {
-  if (!fs.existsSync(ATTENDANCE_SHEET)) return;
-  try {
-    const lines = fs.readFileSync(ATTENDANCE_SHEET, 'utf8').split(/\r?\n/).slice(1).filter(Boolean);
-    const upsert = db.prepare(
-      'INSERT INTO attendance (student_id, date, status) VALUES (?,?,?) ON CONFLICT (student_id, date) DO UPDATE SET status = EXCLUDED.status'
-    );
-    for (const line of lines) {
-      const parts = line.match(/("(?:[^"]|"")*"|[^,]+)/g) || [];
-      const studentId = Number((parts[0] || '').replace(/^"|"$/g, '').replace(/""/g, '"'));
-      const date      = ((parts[3] || '').replace(/^"|"$/g, '').replace(/""/g, '"')).trim();
-      const status    = (((parts[4] || '').replace(/^"|"$/g, '').replace(/""/g, '"')) || 'present').trim().toLowerCase();
-      if (!studentId || !date || !['present','absent'].includes(status)) continue;
-      upsert.run(studentId, date, status);
-    }
-  } catch (e) { console.warn('[syncAttendanceFromSheet]', e.message); }
-}
-function refreshSheets() {
-  exportProfileSheets();
-  exportAttendanceSheet();
-}
 function getCurrentMonthPrefix() {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata',
@@ -515,7 +457,6 @@ async function sendOtpSms(mobileDigits, otp) {
 }
 
 // ── DATABASE SETUP ──────────────────────────────────────────
-ensureSheetsDir();
 db.exec(`
   CREATE TABLE IF NOT EXISTS students (
     id          SERIAL PRIMARY KEY,
@@ -684,7 +625,6 @@ try {
 } catch (e) { /* ignore */ }
 
 seedDefaultTeacher();
-refreshSheets();
 
 // ── MIDDLEWARE ───────────────────────────────────────────────
 app.use(cors());
@@ -803,8 +743,7 @@ app.post('/api/student/register', async (req, res) => {
     if (existingParent) { db.prepare('UPDATE parents SET student_id=? WHERE mobile=?').run(result.lastInsertRowid, mobileDigits); }
     else                { db.prepare('INSERT INTO parents (mobile, student_id) VALUES (?,?)').run(mobileDigits, result.lastInsertRowid); }
     const token = jwt.sign({ id: result.lastInsertRowid, name, email: normalizedEmail, class: cls, subject: normalizedSubject }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ success: true, token, student: { id: result.lastInsertRowid, name, email: normalizedEmail, class: cls, subject: normalizedSubject, approvalStatus: 'accepted', mobile } });
-    refreshSheets();
+      res.json({ success: true, token, student: { id: result.lastInsertRowid, name, email: normalizedEmail, class: cls, subject: normalizedSubject, approvalStatus: 'accepted', mobile } });
   } catch (err) {
     if (err.message.includes('UNIQUE') || err.message.includes('unique')) return res.status(409).json({ error: 'This email is already registered. Please login.' });
     console.error('Register error:', err.message);
@@ -849,7 +788,6 @@ app.post('/api/student/google-login', async (req, res) => {
 });
 
 app.get('/api/student/profile', authStudent, (req, res) => {
-  try { syncAttendanceFromSheet(); } catch (e) { /* ignore */ }
   const studentId = req.student.id;
   const student   = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students WHERE id=?').get(studentId);
   if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -963,7 +901,6 @@ app.post('/api/parent/google-login', async (req, res) => {
 });
 
 app.get('/api/parent/report', authParent, (req, res) => {
-  try { syncAttendanceFromSheet(); } catch (e) { /* ignore */ }
   const { studentId } = req.parent;
   if (!studentId) return res.status(404).json({ error: 'No student linked to this parent account' });
   const student = db.prepare('SELECT id, name, email, class, subject, mobile, board, approval_status, created_at FROM students WHERE id=?').get(studentId);
@@ -1411,7 +1348,7 @@ app.post('/api/teacher/fees', authTeacher, (req, res) => {
     });
   });
   transaction(entries);
-  res.json({ success: true });
+  res.json({ success: true, students: buildTeacherStudentsSnapshot() });
 });
 
 // ============================================================
@@ -1419,12 +1356,10 @@ app.post('/api/teacher/fees', authTeacher, (req, res) => {
 // ============================================================
 app.get('/api/teacher/students', authTeacher, (req, res) => {
   try {
-    try { syncAttendanceFromSheet(); } catch (e) { console.warn('[syncSheet]', e.message); }
     const selectedDate = String(req.query.date || '').trim();
     res.json({
       teacher: { id: req.teacher.id, name: req.teacher.name, email: req.teacher.email },
       selectedDate: selectedDate || null,
-      attendanceSheet: { path: ATTENDANCE_SHEET, fileName: path.basename(ATTENDANCE_SHEET) },
       students: buildTeacherStudentsSnapshot(selectedDate)
     });
   } catch (error) {
@@ -1451,11 +1386,9 @@ app.post('/api/teacher/attendance', authTeacher, (req, res) => {
     }
   });
   transaction(attendance);
-  refreshSheets();
   res.json({
     success: true,
     updated: attendance.length,
-    sheetPath: ATTENDANCE_SHEET,
     students: buildTeacherStudentsSnapshot(date)
   });
 });
@@ -1464,12 +1397,10 @@ app.post('/api/attendance/mark', authTeacher, (req, res) => {
   const { studentId, date, status } = req.body;
   if (!studentId || !date) return res.status(400).json({ error: 'studentId and date required' });
   db.prepare('INSERT INTO attendance (student_id, date, status) VALUES (?,?,?) ON CONFLICT (student_id, date) DO UPDATE SET status = EXCLUDED.status').run(studentId, date, status || 'present');
-  refreshSheets();
   res.json({ success: true });
 });
 
 app.get('/api/attendance/:studentId', authStudent, (req, res) => {
-  try { syncAttendanceFromSheet(); } catch (e) { /* ignore */ }
   const records = db.prepare('SELECT date, status FROM attendance WHERE student_id=? ORDER BY date DESC LIMIT 60').all(req.params.studentId);
   res.json({ records });
 });
@@ -1485,7 +1416,7 @@ app.get('/api/debug/students-count', (req, res) => {
   try {
     const totalStudents  = db.prepare('SELECT COUNT(*) AS count FROM students').get()?.count || 0;
     const latestStudents = db.prepare('SELECT id, name, email, class, created_at FROM students ORDER BY id DESC LIMIT 10').all();
-    res.json({ status: 'ok', database: USING_POSTGRES ? 'postgresql' : 'sqlite', dataDir: USING_POSTGRES ? null : DATA_DIR, totalStudents, latestStudents });
+    res.json({ status: 'ok', database: USING_POSTGRES ? 'postgresql' : 'sqlite', totalStudents, latestStudents });
   } catch (err) { res.status(500).json({ status: 'error', error: err.message }); }
 });
 
