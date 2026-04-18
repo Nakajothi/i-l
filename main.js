@@ -1217,7 +1217,13 @@ async function saveTeacherFees() {
     amountPaid: document.getElementById('fee-paid-' + student.id)?.value || 0
   }));
   try {
-    await API.saveTeacherFees({ paidOn, entries });
+    const result = await API.saveTeacherFees({ paidOn, entries });
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
     showTeacherPanelMessage('teacherFeeMessage', 'Fee payments saved successfully.', false);
     await loadTeacherAttendance();
   } catch (err) {
@@ -1403,6 +1409,12 @@ async function saveTeacherAttendance() {
   }).filter(Boolean);
   try {
     const result = await API.saveTeacherAttendance(date, rows);
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
     renderTeacherSheetInfo(result.sheetPath || '');
     showTeacherAttendanceMessage('Attendance saved successfully for ' + date + '.', false);
     await refreshRoleData();
@@ -1527,6 +1539,7 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
+
 
 
 
