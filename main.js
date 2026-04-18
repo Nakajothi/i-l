@@ -68,9 +68,8 @@ function switchTab(tab, el) {
       loadStudentResources();
       loadStudentDoubts();
     });
-  } else if (tab === 'parent' && (hasActiveStudentSession() || hasActiveParentSession())) {
-    if (hasActiveStudentSession()) refreshStudentParentDashboard();
-    else refreshParentDashboard();
+  } else if (tab === 'parent' && hasActiveParentSession()) {
+    refreshParentDashboard();
   }
 }
 
@@ -148,10 +147,18 @@ function redirectToParentDashboard() {
   const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
   if (isHome) {
     updateHomeForSession();
-    if (hasActiveStudentSession()) refreshStudentParentDashboard();
-    else refreshParentDashboard();
-    const parentTab = document.getElementById('parentDashTab');
-    if (parentTab) switchTab('parent', parentTab);
+    if (hasActiveStudentSession()) {
+      refreshRoleData().then(() => {
+        loadStudentResources();
+        loadStudentDoubts();
+      });
+      const studentTab = document.getElementById('studentDashTab');
+      if (studentTab) switchTab('student', studentTab);
+    } else {
+      refreshParentDashboard();
+      const parentTab = document.getElementById('parentDashTab');
+      if (parentTab) switchTab('parent', parentTab);
+    }
     document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
     return;
   }
@@ -883,7 +890,7 @@ function updateDashboardAttendanceCards() {
  
   const feeSummary = parentReport?.feeSummary || null;
   if (feeSummary || parentStudent?.class) {
-    setElementText('parentFeeBatch',   parentStudent?.class ? `Class ${parentStudent.class}` : 'Linked batch');
+    setElementText('parentFeeBatch',   parentStudent?.class ? `Class ${parentStudent.class}` : 'Class --');
     const pendingAmt = Number(feeSummary?.pending || 0);
     setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
     setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
@@ -954,7 +961,6 @@ function updateHomeForSession() {
     }
   } else if (role === 'student') {
     if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
-    if (parentTab) { parentTab.style.display = 'inline-block'; }
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   } else if (role === 'parent') {
     if (parentTab) { parentTab.style.display = 'inline-block'; parentTab.classList.add('active'); }
@@ -962,7 +968,7 @@ function updateHomeForSession() {
     if (typeof ensureParentExtraWidgets === 'function') ensureParentExtraWidgets();
   } else {
     // No role — show all tabs, student active by default
-    [studentTab, parentTab, teacherTab].forEach(t => { if (t) t.style.display = 'inline-block'; });
+    [studentTab, teacherTab].forEach(t => { if (t) t.style.display = 'inline-block'; });
     if (studentTab) studentTab.classList.add('active');
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   }
@@ -979,12 +985,6 @@ function setDefaultTeacherDate() {
   const today = new Date();
   const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
   input.value = localDate;
-}
-
-function renderTeacherSheetInfo(sheetPath) {
-  const info = document.getElementById('teacherSheetInfo');
-  if (!info) return;
-  info.textContent = sheetPath ? 'Attendance sheet: ' + sheetPath : 'Attendance sheet will be generated after saving.';
 }
 
 let teacherStudentCache = [];
@@ -1182,7 +1182,13 @@ async function saveTeacherWeeklyTests() {
     notes: document.getElementById('weekly-note-' + student.id)?.value || ''
   }));
   try {
-    await API.saveTeacherWeeklyTests({ title, testDate, totalMarks, entries });
+    const result = await API.saveTeacherWeeklyTests({ title, testDate, totalMarks, entries });
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
     showTeacherPanelMessage('teacherWeeklyTestMessage', 'Weekly test marks saved successfully.', false);
     await loadTeacherAttendance();
   } catch (err) {
@@ -1389,7 +1395,6 @@ async function loadTeacherAttendance() {
     renderTeacherAttendanceTable(teacherStudentCache);
     renderTeacherWeeklyTestTable(teacherStudentCache);
     renderTeacherFeeTable(teacherStudentCache);
-    renderTeacherSheetInfo(data.attendanceSheet?.path || '');
     renderNavProfile();
     await loadTeacherQuestionPapers();
   } catch (err) {
@@ -1415,7 +1420,6 @@ async function saveTeacherAttendance() {
       renderTeacherWeeklyTestTable(teacherStudentCache);
       renderTeacherFeeTable(teacherStudentCache);
     }
-    renderTeacherSheetInfo(result.sheetPath || '');
     showTeacherAttendanceMessage('Attendance saved successfully for ' + date + '.', false);
     await refreshRoleData();
     await loadTeacherAttendance();
@@ -1530,7 +1534,6 @@ window.addEventListener('load', async () => {
 
   } else if (role === 'student') {
     try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
-    try { await refreshStudentParentDashboard(); } catch (e) { console.warn('Student parent report refresh failed:', e.message); }
     try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
     try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
 
@@ -1539,8 +1542,6 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
-
-
 
 
 
