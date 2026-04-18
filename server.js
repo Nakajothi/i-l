@@ -853,7 +853,7 @@ app.get('/api/student/profile', authStudent, (req, res) => {
 // ============================================================
 //  PARENT ROUTES
 // ============================================================
-app.post('/api/parent/send-otp', otpLimiter, async (req, res) => {
+app.post('/api/parent/send-otp', Limiter, async (req, res) => {
   return res.status(410).json({ error: 'Parent OTP login has been removed. Please use Google login with the linked student Gmail.' });
   const { mobile } = req.body;
   if (!mobile) return res.status(400).json({ error: 'Mobile number required' });
