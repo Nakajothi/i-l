@@ -84,9 +84,9 @@ function buildFeeSummary(studentId, studentClass) {
 function buildTeacherStudentsSnapshot(selectedDate = '') {
   const students = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students ORDER BY class, name').all();
   const attendanceByStudent = db.prepare("SELECT student_id, SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS presentCount, COUNT(*) AS totalCount FROM attendance GROUP BY student_id").all();
-  const attendanceMap = new Map(attendanceByStudent.map((row) => [row.student_id, row]));
+  const attendanceMap = new Map(attendanceByStudent.map((row) => [Number(row.student_id), row]));
   const attendanceForDate = selectedDate ? db.prepare('SELECT student_id, status FROM attendance WHERE date=?').all(selectedDate) : [];
-  const statusMap = new Map(attendanceForDate.map((row) => [row.student_id, row.status]));
+  const statusMap = new Map(attendanceForDate.map((row) => [Number(row.student_id), row.status]));
 
   let feePayments = [];
   try {
@@ -96,9 +96,10 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
   }
   const feePaymentsMap = new Map();
   feePayments.forEach((payment) => {
-    const list = feePaymentsMap.get(payment.student_id) || [];
+    const studentId = Number(payment.student_id);
+    const list = feePaymentsMap.get(studentId) || [];
     list.push(payment);
-    feePaymentsMap.set(payment.student_id, list);
+    feePaymentsMap.set(studentId, list);
   });
 
   let latestWeeklyTests = [];
@@ -114,19 +115,20 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
   } catch (error) {
     console.warn('[teacher snapshot weekly_tests]', error.message);
   }
-  const latestWeeklyTestMap = new Map(latestWeeklyTests.map((t) => [t.student_id, t]));
+  const latestWeeklyTestMap = new Map(latestWeeklyTests.map((t) => [Number(t.student_id), t]));
 
   return students.map((student) => {
-    const stats = attendanceMap.get(student.id) || { presentCount: 0, totalCount: 0 };
+    const studentId = Number(student.id);
+    const stats = attendanceMap.get(studentId) || { presentCount: 0, totalCount: 0 };
     const totalCount = Number(stats.totalCount) || 0;
     const presentCount = Number(stats.presentCount) || 0;
-    const payments = feePaymentsMap.get(student.id) || [];
+    const payments = feePaymentsMap.get(studentId) || [];
     const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0);
     const totalDue = getClassFeeTarget(student.class);
     return {
       ...student,
       approvalStatus: String(student.approval_status || 'accepted').toLowerCase(),
-      currentStatus: statusMap.get(student.id) || null,
+      currentStatus: statusMap.get(studentId) || null,
       attendance: {
         present: presentCount,
         total: totalCount,
@@ -138,7 +140,7 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
         pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100),
         payments
       },
-      latestWeeklyTest: latestWeeklyTestMap.get(student.id) || null
+      latestWeeklyTest: latestWeeklyTestMap.get(studentId) || null
     };
   });
 }
@@ -627,6 +629,7 @@ try {
 seedDefaultTeacher();
 
 // ── MIDDLEWARE ───────────────────────────────────────────────
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
