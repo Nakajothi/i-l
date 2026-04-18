@@ -683,6 +683,12 @@ async function refreshParentDashboard() {
   }
 }
 
+function deriveParentReportFromStudentState() {
+  const studentProfile = getStoredProfileState('ilearn_student_profile');
+  if (!Object.keys(studentProfile || {}).length) return {};
+  return buildStudentParentView(studentProfile);
+}
+
 function buildStudentParentView(profile) {
   const student = profile.student || {};
   const latestAssessment = profile.latestAssessment || null;
@@ -716,7 +722,8 @@ function buildStudentParentView(profile) {
 async function refreshStudentParentDashboard() {
   if (!hasActiveStudentSession()) return;
   try {
-    const profile = getStoredProfileState('ilearn_student_profile');
+    const profile = await API.getStudentProfile();
+    localStorage.setItem('ilearn_student_profile', JSON.stringify(profile));
     if (!Object.keys(profile || {}).length) return;
     const parentView = buildStudentParentView(profile);
     localStorage.setItem('ilearn_parent_profile', JSON.stringify(parentView));
@@ -857,8 +864,10 @@ function updateDashboardAttendanceCards() {
   // ── Parent attendance + fee cards ──
   // Normalise: the API response has attendance at report.attendanceSummary
   // AND at the flat top-level — handle both.
-  const parentReport  = parentApiResponse.report || parentApiResponse;
-  const parentStudent = parentApiResponse.student || parentStored;
+  const derivedParentState = role === 'student' ? deriveParentReportFromStudentState() : {};
+  const effectiveParentApiResponse = Object.keys(parentApiResponse || {}).length ? parentApiResponse : derivedParentState;
+  const parentReport  = effectiveParentApiResponse.report || effectiveParentApiResponse;
+  const parentStudent = effectiveParentApiResponse.student || parentStored || studentProfile.student || studentStored;
  
   const parentMonth   = parentReport?.attendanceSummary?.month  || parentReport?.attendance || null;
   const parentOverall = parentReport?.attendanceSummary?.overall || parentMonth;
@@ -883,7 +892,7 @@ function updateDashboardAttendanceCards() {
   }
  
   // ── Re-inject ALL parent tab widgets from cache (so tab-switch stays live) ──
-  if ((role === 'parent' || role === 'student') && Object.keys(parentApiResponse).length) {
+  if ((role === 'parent' || role === 'student') && Object.keys(effectiveParentApiResponse || {}).length) {
     if (typeof injectParentTabData === 'function') {
       injectParentTabData(parentReport, parentStudent);
     }
@@ -1518,7 +1527,6 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
-
 
 
 
