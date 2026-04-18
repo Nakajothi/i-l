@@ -827,7 +827,7 @@ function updateDashboardAttendanceCards() {
 // ── FIX: updateHomeForSession — correctly shows teacher dashboard ──────────────
 function updateHomeForSession() {
   const role = getCurrentRole();
-
+ 
   // Show/hide role-specific sections
   document.querySelectorAll('.role-student-only').forEach((el) => {
     el.style.display = (!role || role === 'student') ? '' : 'none';
@@ -836,35 +836,38 @@ function updateHomeForSession() {
     el.style.display = (!role || role === 'parent') ? '' : 'none';
   });
   document.querySelectorAll('.role-teacher-only').forEach((el) => {
-    // Use 'block' for generic elements, but dash-content tabs need 'grid'
     el.style.display = role === 'teacher' ? '' : 'none';
   });
-
+ 
   // Hide assessment and AI features sections for teacher
   [document.getElementById('assessment'), document.getElementById('ai-features')].forEach((section) => {
     if (section) section.style.display = role === 'teacher' ? 'none' : '';
   });
-
+ 
   // Get tab and content elements
-  const studentTab = document.getElementById('studentDashTab');
-  const parentTab = document.getElementById('parentDashTab');
-  const teacherTab = document.getElementById('teacherDashTab');
+  const studentTab     = document.getElementById('studentDashTab');
+  const parentTab      = document.getElementById('parentDashTab');
+  const teacherTab     = document.getElementById('teacherDashTab');
   const studentContent = document.getElementById('tab-student');
-  const parentContent = document.getElementById('tab-parent');
+  const parentContent  = document.getElementById('tab-parent');
   const teacherContent = document.getElementById('tab-teacher');
-
+ 
   // Reset all tabs and contents first
   [studentTab, parentTab, teacherTab].forEach(t => t && t.classList.remove('active'));
   [studentContent, parentContent, teacherContent].forEach(c => {
     if (c) { c.classList.remove('active'); c.style.display = 'none'; }
   });
-
+ 
   if (role === 'teacher') {
-    // Show teacher tab button (it's role-teacher-only so may be hidden — force show)
-    if (teacherTab) { teacherTab.style.display = ''; teacherTab.classList.add('active'); }
+    // FORCE show teacher tab regardless of role-teacher-only CSS
+    if (teacherTab) {
+      teacherTab.style.display = 'inline-block';  // override the CSS hide
+      teacherTab.style.visibility = 'visible';
+      teacherTab.classList.add('active');
+    }
     // Hide student/parent tabs
     if (studentTab) studentTab.style.display = 'none';
-    if (parentTab) parentTab.style.display = 'none';
+    if (parentTab)  parentTab.style.display  = 'none';
     // Show teacher content with grid display
     if (teacherContent) {
       teacherContent.classList.add('active');
@@ -872,27 +875,26 @@ function updateHomeForSession() {
     }
   } else if (role === 'student') {
     if (studentTab) { studentTab.style.display = ''; studentTab.classList.add('active'); }
-    if (parentTab) parentTab.style.display = 'none';
-    if (teacherTab) teacherTab.style.display = 'none';
+    if (parentTab)  parentTab.style.display  = 'none';
+    if (teacherTab) teacherTab.style.display  = 'none';
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   } else if (role === 'parent') {
-    if (parentTab) { parentTab.style.display = ''; parentTab.classList.add('active'); }
+    if (parentTab)  { parentTab.style.display  = ''; parentTab.classList.add('active'); }
     if (studentTab) studentTab.style.display = 'none';
-    if (teacherTab) teacherTab.style.display = 'none';
+    if (teacherTab) teacherTab.style.display  = 'none';
     if (parentContent) { parentContent.classList.add('active'); parentContent.style.display = 'grid'; }
     if (typeof ensureParentExtraWidgets === 'function') ensureParentExtraWidgets();
   } else {
     // No role — show all tabs, student tab active by default
     [studentTab, parentTab, teacherTab].forEach(t => t && (t.style.display = ''));
-    if (studentTab) studentTab.classList.add('active');
+    if (studentTab)     studentTab.classList.add('active');
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   }
-
+ 
   renderNavProfile();
   updateAuthRequiredState();
   updateDashboardAttendanceCards();
 }
-
 // ── TEACHER FUNCTIONS ─────────────────────────────────────────────────────────
 function setDefaultTeacherDate() {
   const input = document.getElementById('teacherAttendanceDate');
@@ -1416,26 +1418,47 @@ async function renderDailyMcqs(role) {
 // ── FIX: PAGE LOAD — teacher dashboard loads data correctly ───────────────────
 window.addEventListener('load', async () => {
   renderTeacherMcqCards();
-
+ 
   const role = getCurrentRole();
-
-  // Apply session UI first (shows correct tab, hides others)
+ 
+  // Apply session UI FIRST — shows correct tab, hides others
   updateHomeForSession();
-
+ 
   if (role === 'teacher') {
-    // Load all teacher data
+    // Extra safety: force teacher tab visible after all CSS has settled
+    setTimeout(() => {
+      const teacherTab     = document.getElementById('teacherDashTab');
+      const teacherContent = document.getElementById('tab-teacher');
+      if (teacherTab) {
+        teacherTab.style.display    = 'inline-block';
+        teacherTab.style.visibility = 'visible';
+        teacherTab.classList.add('active');
+        document.querySelectorAll('.dash-tab').forEach(t => {
+          if (t.id !== 'teacherDashTab') t.classList.remove('active');
+        });
+      }
+      if (teacherContent) {
+        document.querySelectorAll('.dash-content').forEach(c => {
+          c.classList.remove('active');
+          c.style.display = 'none';
+        });
+        teacherContent.classList.add('active');
+        teacherContent.style.display = 'grid';
+      }
+    }, 0);
+ 
     try { await loadTeacherAttendance(); } catch (e) { console.warn('Teacher attendance load failed:', e.message); }
-    try { await loadTeacherMcqs(); } catch (e) { console.warn('Teacher MCQ load failed:', e.message); }
-    try { await loadTeacherDoubts(); } catch (e) { console.warn('Teacher doubts load failed:', e.message); }
+    try { await loadTeacherMcqs();       } catch (e) { console.warn('Teacher MCQ load failed:', e.message); }
+    try { await loadTeacherDoubts();     } catch (e) { console.warn('Teacher doubts load failed:', e.message); }
     updateDashboardAttendanceCards();
     renderNavProfile();
   } else if (role === 'student') {
-    try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
-    try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
-    try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
+    try { await refreshRoleData();       } catch (e) { console.warn('Student profile refresh failed:', e.message); }
+    try { await loadStudentResources();  } catch (e) { console.warn('Student resources load failed:', e.message); }
+    try { await loadStudentDoubts();     } catch (e) { console.warn('Student doubts load failed:', e.message); }
   } else if (role === 'parent') {
-    try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
-    try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
+    try { await refreshParentDashboard();} catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
+    try { await loadStudentResources();  } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
 
