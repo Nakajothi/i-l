@@ -55,21 +55,19 @@ function switchTab(tab, el) {
   const tabEl = document.getElementById('tab-' + tab);
   if (tabEl) {
     tabEl.classList.add('active');
-    tabEl.style.display = 'grid';
+    tabEl.style.cssText = 'display:grid !important; visibility:visible !important; opacity:1 !important;';
   }
 
   if (tab === 'teacher' && hasActiveTeacherSession()) {
-    refreshRoleData();
-    loadTeacherAttendance();
-    loadTeacherMcqs();
-    loadTeacherDoubts();
+    refreshRoleData().catch(() => {});
+    loadTeacherAttendance().catch(() => {});
+    loadTeacherMcqs().catch(() => {});
+    loadTeacherDoubts().catch(() => {});
   } else if (tab === 'student' && hasActiveStudentSession()) {
     refreshRoleData().then(() => {
       loadStudentResources();
       loadStudentDoubts();
     });
-  } else if (tab === 'parent' && hasActiveParentSession()) {
-    refreshParentDashboard();
   }
 }
 
@@ -147,18 +145,12 @@ function redirectToParentDashboard() {
   const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
   if (isHome) {
     updateHomeForSession();
-    if (hasActiveStudentSession()) {
-      refreshRoleData().then(() => {
-        loadStudentResources();
-        loadStudentDoubts();
-      });
-      const studentTab = document.getElementById('studentDashTab');
-      if (studentTab) switchTab('student', studentTab);
-    } else {
-      refreshParentDashboard();
-      const parentTab = document.getElementById('parentDashTab');
-      if (parentTab) switchTab('parent', parentTab);
-    }
+    refreshRoleData().then(() => {
+      loadStudentResources();
+      loadStudentDoubts();
+    });
+    const studentTab = document.getElementById('studentDashTab');
+    if (studentTab) switchTab('student', studentTab);
     document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
     return;
   }
@@ -934,17 +926,15 @@ function updateHomeForSession() {
 
   // Get tab and content elements
   const studentTab     = document.getElementById('studentDashTab');
-  const parentTab      = document.getElementById('parentDashTab');
   const teacherTab     = document.getElementById('teacherDashTab');
   const studentContent = document.getElementById('tab-student');
-  const parentContent  = document.getElementById('tab-parent');
   const teacherContent = document.getElementById('tab-teacher');
 
   // Reset all tabs and contents
-  [studentTab, parentTab, teacherTab].forEach(t => {
+  [studentTab, teacherTab].forEach(t => {
     if (t) { t.classList.remove('active'); t.style.display = 'none'; }
   });
-  [studentContent, parentContent, teacherContent].forEach(c => {
+  [studentContent, teacherContent].forEach(c => {
     if (c) { c.classList.remove('active'); c.style.display = 'none'; }
   });
 
@@ -962,10 +952,6 @@ function updateHomeForSession() {
   } else if (role === 'student') {
     if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
-  } else if (role === 'parent') {
-    if (parentTab) { parentTab.style.display = 'inline-block'; parentTab.classList.add('active'); }
-    if (parentContent) { parentContent.classList.add('active'); parentContent.style.display = 'grid'; }
-    if (typeof ensureParentExtraWidgets === 'function') ensureParentExtraWidgets();
   } else {
     // No role — show all tabs, student active by default
     [studentTab, teacherTab].forEach(t => { if (t) t.style.display = 'inline-block'; });
