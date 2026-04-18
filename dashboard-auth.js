@@ -446,7 +446,7 @@ function injectParentTabData(report, student) {
   setUpdatedLabel('parentAttendanceUpdated', now);
 
   // ── Fee summary ─────────────────────────────────────────────────────────────
-  setElementText('parentFeeBatch',   effectiveStudent?.class ? `Class ${effectiveStudent.class}` : 'Linked batch');
+  setElementText('parentFeeBatch',   effectiveStudent?.class ? `Class ${effectiveStudent.class}` : 'Class --');
   const pendingAmt = Number(feeSummary?.pending || 0);
   setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No fee entries yet');
   setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
@@ -603,5 +603,4 @@ window.addEventListener('load', () => {
     setupParentDashboard();
   }
 });
-
 
