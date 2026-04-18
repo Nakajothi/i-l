@@ -3,6 +3,7 @@ services:
     name: i-learn-academy
     env: node
     plan: starter
+    region : singapore
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true
@@ -21,3 +22,4 @@ services:
 databases:
   - name: i-learn-academy-db
     plan: free
+    region : singapore
