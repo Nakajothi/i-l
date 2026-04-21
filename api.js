@@ -80,6 +80,9 @@ const API = {
   },
 
   getStudentProfile() { return this.get('/student/profile', this.token()); },
+  getStudentAttendanceCard() { return this.get('/student/dashboard/attendance', this.token()); },
+  getStudentFeeCard() { return this.get('/student/dashboard/fees', this.token()); },
+  getStudentWeeklyTestCard() { return this.get('/student/dashboard/weekly-tests', this.token()); },
 
   logoutStudent() {
     ['ilearn_token','ilearn_student','ilearn_student_profile',
