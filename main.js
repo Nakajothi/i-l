@@ -730,7 +730,7 @@ async function refreshStudentParentDashboard() {
     if (typeof injectParentTabData === 'function') {
       injectParentTabData(parentView.report, parentView.student);
     }
-    updateDashboardAttendanceCards();
+    await renderStudentDashboardCards(profile);
     renderNavProfile();
   } catch (err) {
     console.warn('Student dashboard support refresh failed:', err.message || err);
@@ -752,6 +752,7 @@ async function refreshRoleData() {
       } catch (innerErr) {
         console.warn('Timetable refresh skipped:', innerErr.message || innerErr);
       }
+      await renderStudentDashboardCards(profile);
     } else if (role === 'parent') {
       await refreshParentDashboard();
       return;
@@ -774,14 +775,49 @@ async function refreshRoleData() {
     }
     console.warn('Profile refresh skipped:', err.message || err);
   }
-  updateDashboardAttendanceCards();
-  renderTodayTimetableReminder();
+  if (role !== 'student') {
+    updateDashboardAttendanceCards();
+    renderTodayTimetableReminder();
+  }
 }
 
-function renderStudentWeeklyTestCard(profile, now) {
+function renderStudentAttendanceCard(profile, now) {
+  const month = profile?.attendanceSummary?.month || {};
+  const overall = profile?.attendanceSummary?.overall || {};
+  setElementText('studentAttendanceMonth', `${month.present || 0} / ${month.total || 0} days`);
+  setElementText('studentAttendanceOverall', `${overall.percentage || 0}%`);
+  setElementText('studentAttendanceProgressLabel', `${overall.percentage || 0}%`);
+  setElementWidth('studentAttendanceProgress', `${Math.max(0, Math.min(100, Number(overall.percentage || 0)))}%`);
+  setElementText('studentAttendanceHint', overall.total
+    ? `Teacher attendance source: ${overall.present}/${overall.total} classes marked.`
+    : 'Teacher attendance source: no attendance entries yet.');
+  setUpdatedLabel('studentAttendanceUpdated', now);
+}
+
+function renderStudentStreakCard(profile, now) {
+  const streakValue = Number(profile.mcqStreak || 0);
+  setElementText('studentStreakValue', streakValue + ' day' + (streakValue === 1 ? '' : 's'));
+  setUpdatedLabel('studentStreakUpdated', now);
+}
+
+function renderStudentFeeCardData(student, feeSummary, now) {
+  setElementText('parentFeeBatch', student?.class ? `Class ${student.class}` : 'Class --');
+  const pendingAmt = Number(feeSummary?.pending || 0);
+  setElementText('parentFeeStatus', feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
+  setElementText('parentFeePaid', `Rs ${feeSummary?.totalPaid || 0}`);
+  setElementText('parentFeePending', `Rs ${feeSummary?.pending || 0}`);
+  const feeLastPaidRow = document.getElementById('parentFeeLastPaid');
+  if (feeLastPaidRow) {
+    const lastPayment = Array.isArray(feeSummary?.payments) && feeSummary.payments.length ? feeSummary.payments[0] : null;
+    feeLastPaidRow.innerHTML = `<span class="metric-label">Last Paid</span><span class="metric-value">${lastPayment ? `${lastPayment.paid_on} - Rs ${lastPayment.amount_paid}` : '-'}</span>`;
+  }
+  setUpdatedLabel('parentFeeUpdated', now);
+}
+
+function renderStudentWeeklyTestCardData(weeklyTests, now) {
   const wrap = document.getElementById('parentWeeklyTests');
   if (!wrap) return;
-  const tests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
+  const tests = Array.isArray(weeklyTests) ? weeklyTests : [];
   if (!tests.length) {
     wrap.innerHTML = '<div style="color:var(--muted);font-size:0.88rem;">Weekly test marks will appear here once teachers enter them.</div>';
     setUpdatedLabel('parentWeeklyTestsUpdated', now);
@@ -799,14 +835,14 @@ function renderStudentWeeklyTestCard(profile, now) {
   setUpdatedLabel('parentWeeklyTestsUpdated', now);
 }
 
-function renderStudentTopicCards(profile) {
+function renderStudentTopicCardsData(payload) {
   const topicWrap = document.getElementById('parentTopicProgress');
   const strongWrap = document.getElementById('parentStrongTopics');
   const weakWrap = document.getElementById('parentWeakTopics');
   if (!topicWrap && !strongWrap && !weakWrap) return;
 
-  const weeklyTests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
-  const overallAttendance = Number(profile.attendanceSummary?.overall?.percentage || 0);
+  const weeklyTests = Array.isArray(payload.weeklyTests) ? payload.weeklyTests : [];
+  const overallAttendance = Number(payload.attendanceSummary?.overall?.percentage || 0);
   const averageScore = weeklyTests.length
     ? Math.round(weeklyTests.reduce((sum, test) => {
         const total = Number(test.total_marks || 0);
@@ -814,7 +850,7 @@ function renderStudentTopicCards(profile) {
         return sum + (total ? ((marks / total) * 100) : 0);
       }, 0) / weeklyTests.length)
     : 0;
-  const pendingFees = Number(profile.feeSummary?.pending || 0);
+  const pendingFees = Number(payload.feeSummary?.pending || 0);
 
   if (topicWrap) {
     topicWrap.innerHTML = weeklyTests.length
@@ -850,6 +886,48 @@ function renderStudentTopicCards(profile) {
       ? weakItems.map((item) => `<div class="alert-pill pink"><div class="alert-title pink">${item}</div><div class="alert-desc">This needs attention in the current flow.</div></div>`).join('')
       : '<span style="color:#8888AA;font-size:0.88rem;">No urgent weak areas flagged right now.</span>';
   }
+}
+
+async function renderStudentDashboardCards(profile) {
+  const now = new Date();
+  const student = profile?.student || getStoredProfileState('ilearn_student');
+  setElementText('dashboardWelcomeName', student?.name || 'Student');
+  setElementText('dashboardWelcomeRole', 'Signed in as student');
+  setUpdatedLabel('dashboardWelcomeUpdated', now);
+  const [attendanceData, feeData, weeklyData] = await Promise.all([
+    API.getStudentAttendanceCard().catch(() => ({
+      student,
+      attendanceSummary: profile?.attendanceSummary || {},
+      weeklySummary: profile?.weeklySummary?.attendance || null
+    })),
+    API.getStudentFeeCard().catch(() => ({
+      student,
+      feeSummary: profile?.feeSummary || null
+    })),
+    API.getStudentWeeklyTestCard().catch(() => ({
+      student,
+      weeklyTests: profile?.weeklyTests || [],
+      topicScores: {},
+      weakTopics: [],
+      strongTopics: []
+    }))
+  ]);
+
+  renderStudentAttendanceCard({
+    attendanceSummary: attendanceData.attendanceSummary || profile?.attendanceSummary || {}
+  }, now);
+  renderStudentStreakCard(profile, now);
+  renderStudentFeeCardData(feeData.student || student, feeData.feeSummary || profile?.feeSummary || null, now);
+  renderStudentWeeklyTestCardData(weeklyData.weeklyTests || profile?.weeklyTests || [], now);
+  renderStudentTopicCardsData({
+    weeklyTests: weeklyData.weeklyTests || profile?.weeklyTests || [],
+    attendanceSummary: attendanceData.attendanceSummary || profile?.attendanceSummary || {},
+    feeSummary: feeData.feeSummary || profile?.feeSummary || null,
+    topicScores: weeklyData.topicScores || {},
+    weakTopics: weeklyData.weakTopics || [],
+    strongTopics: weeklyData.strongTopics || []
+  });
+  renderTodayTimetableReminder();
 }
 
 // ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
@@ -926,6 +1004,13 @@ function updateDashboardAttendanceCards() {
   setElementText('dashboardWelcomeName',    welcomeName || 'Learner');
   setElementText('dashboardWelcomeRole',    role ? `Signed in as ${role}` : 'Sign in to view your dashboard');
   setUpdatedLabel('dashboardWelcomeUpdated', now);
+
+  if (role === 'student' && Object.keys(studentProfile || {}).length) {
+    renderStudentDashboardCards(studentProfile).catch((err) => {
+      console.warn('Student card render failed:', err.message || err);
+    });
+    return;
+  }
  
   // ── Student attendance card ──
   const studentMonth   = studentProfile.attendanceSummary?.month   || null;
