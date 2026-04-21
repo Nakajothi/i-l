@@ -1,751 +1,1546 @@
-let teacherStudents = [];
-let currentLoginType = 'student';
-let currentTab = 'student';
-let assessmentState = {
-  step: 1,
-  questions: [],
-  answers: [],
-  index: 0,
-  studentDraft: null
-};
-
-const classQuestionBank = {
-  '9': [
-    { topic: 'Algebra', question: 'What is the value of x in 3x + 6 = 18?', options: ['2', '4', '6', '8'], answer: 1 },
-    { topic: 'Geometry', question: 'How many degrees are there in a triangle?', options: ['90', '120', '180', '360'], answer: 2 },
-    { topic: 'Mensuration', question: 'Area of a square with side 6 cm is?', options: ['12', '24', '36', '48'], answer: 2 },
-    { topic: 'Statistics', question: 'The average of 4, 6, 8 is?', options: ['5', '6', '7', '8'], answer: 1 }
-  ],
-  '10': [
-    { topic: 'Trigonometry', question: 'sin 90 degrees is?', options: ['0', '1/2', '1', '2'], answer: 2 },
-    { topic: 'Algebra', question: 'The roots of x^2 - 5x + 6 are?', options: ['1, 6', '2, 3', '3, 5', '1, 5'], answer: 1 },
-    { topic: 'Statistics', question: 'Mode means?', options: ['Average', 'Middle value', 'Most repeated value', 'Range'], answer: 2 },
-    { topic: 'Coordinate Geometry', question: 'Distance between (0,0) and (3,4) is?', options: ['4', '5', '6', '7'], answer: 1 }
-  ],
-  '11': [
-    { topic: 'Sets', question: 'If A has 3 elements and B has 2, then A x B has?', options: ['5', '6', '8', '9'], answer: 1 },
-    { topic: 'Trigonometry', question: 'tan 45 degrees is?', options: ['0', '1', 'sqrt(2)', '2'], answer: 1 },
-    { topic: 'Calculus', question: 'Derivative of x^2 is?', options: ['x', '2x', 'x^3', '2'], answer: 1 },
-    { topic: 'Sequences', question: 'Next term in 2, 4, 8, 16 is?', options: ['18', '24', '30', '32'], answer: 3 }
-  ],
-  '12': [
-    { topic: 'Calculus', question: 'Integral of 1 dx is?', options: ['0', '1', 'x + C', 'x^2 + C'], answer: 2 },
-    { topic: 'Probability', question: 'Probability values always lie between?', options: ['0 and 1', '1 and 2', '-1 and 1', '0 and 100'], answer: 0 },
-    { topic: 'Matrices', question: 'A 2 x 3 matrix has how many elements?', options: ['5', '6', '8', '9'], answer: 1 },
-    { topic: 'Vectors', question: 'A vector has?', options: ['Only magnitude', 'Only direction', 'Magnitude and direction', 'Neither'], answer: 2 }
-  ]
-};
-
-function $(id) {
-  return document.getElementById(id);
+function showLoginError(message) {
+  const el = document.getElementById('loginErrorMessage');
+  if (!el) return;
+  el.textContent = message ? message : 'Login failed.';
+  el.style.display = 'block';
 }
 
-function todayIsoDate() {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
+function clearLoginError() {
+  const el = document.getElementById('loginErrorMessage');
+  if (!el) return;
+  el.textContent = '';
+  el.style.display = 'none';
 }
 
-function formatUpdated() {
-  return new Date().toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+// ── 1. SCROLL ANIMATIONS ──────────────────────────────────────────────────────
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.12 });
+document.querySelectorAll('.animate-in').forEach(el => observer.observe(el));
+
+// ── 2. STICKY NAVBAR ──────────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  const nav = document.getElementById('navbar');
+  if (nav) nav.style.background = window.scrollY > 50
+    ? 'rgba(13,13,26,0.98)' : 'rgba(13,13,26,0.88)';
+});
+
+// ── 3. MOBILE MENU ────────────────────────────────────────────────────────────
+function toggleMenu() {
+  const links = document.querySelector('.nav-links');
+  if (!links) return;
+  const open = links.style.display === 'flex';
+  if (open) {
+    links.style.display = 'none';
+  } else {
+    Object.assign(links.style, {
+      display: 'flex', flexDirection: 'column', position: 'absolute',
+      top: '65px', left: '0', right: '0',
+      background: 'rgba(13,13,26,0.98)',
+      padding: '20px 24px',
+      borderTop: '1px solid rgba(255,255,255,0.07)',
+      zIndex: '999'
+    });
+  }
+}
+
+// ── 4. DASHBOARD TABS ─────────────────────────────────────────────────────────
+function switchTab(tab, el) {
+  document.querySelectorAll('.dash-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.dash-content').forEach(c => {
+    c.classList.remove('active');
+    c.style.display = 'none';
   });
+  el.classList.add('active');
+  const tabEl = document.getElementById('tab-' + tab);
+  if (tabEl) {
+    tabEl.classList.add('active');
+    tabEl.style.cssText = 'display:grid !important; visibility:visible !important; opacity:1 !important;';
+  }
+
+  if (tab === 'teacher' && hasActiveTeacherSession()) {
+    refreshRoleData().catch(() => {});
+    loadTeacherAttendance().catch(() => {});
+    loadTeacherMcqs().catch(() => {});
+    loadTeacherDoubts().catch(() => {});
+  } else if (tab === 'student' && hasActiveStudentSession()) {
+    refreshRoleData().then(() => {
+      loadStudentResources();
+      loadStudentDoubts();
+    });
+  }
 }
 
-function currentRole() {
-  if (localStorage.getItem('ilearn_teacher_token')) return 'teacher';
-  if (localStorage.getItem('ilearn_student_token')) return 'student';
-  return null;
-}
-
-function setText(id, value) {
-  const node = $(id);
-  if (node) node.textContent = value;
-}
-
-function setHtml(id, value) {
-  const node = $(id);
-  if (node) node.innerHTML = value;
-}
-
-function showMessage(id, message, tone = 'error') {
-  const node = $(id);
-  if (!node) return;
-  node.textContent = message;
-  node.style.display = message ? 'block' : 'none';
-  node.style.background = tone === 'success' ? 'rgba(0,229,160,0.08)' : 'rgba(255,45,120,0.08)';
-  node.style.border = tone === 'success'
-    ? '1px solid rgba(0,229,160,0.25)'
-    : '1px solid rgba(255,45,120,0.25)';
-}
-
+// ── LOGIN MODAL ───────────────────────────────────────────────────────────────
 function openLoginModal() {
-  $('loginModal')?.classList.add('open');
-  showMessage('loginErrorMessage', '');
-}
-
-function closeLoginModal() {
-  $('loginModal')?.classList.remove('open');
-}
-
-function openRegisterModal() {
-  $('registerModal')?.classList.add('open');
-  showRegisterStep(1);
-}
-
-function closeRegisterModal() {
-  $('registerModal')?.classList.remove('open');
-  resetAssessment();
+  document.getElementById('loginModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  updateAuthRequiredState();
 }
 
 function openDoubtModal() {
-  showMessage('doubtSubmitMessage', 'Doubt box can be connected next once the core dashboard flow is stable.');
-  $('doubtModal')?.classList.add('open');
+  const modal = document.getElementById('doubtModal');
+  const msg = document.getElementById('doubtSubmitMessage');
+  if (msg) { msg.textContent = ''; msg.style.display = 'none'; }
+  if (modal) modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeDoubtModal() {
-  $('doubtModal')?.classList.remove('open');
+  const modal = document.getElementById('doubtModal');
+  if (modal) modal.classList.remove('open');
+  document.body.style.overflow = '';
+  const q = document.getElementById('doubtQuestionText');
+  const i = document.getElementById('doubtQuestionImage');
+  if (q) q.value = '';
+  if (i) i.value = '';
 }
 
-function toggleMenu() {
-  const navLinks = document.querySelector('.nav-links');
-  if (!navLinks) return;
-  navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+async function submitStudentDoubt() {
+  const text = (document.getElementById('doubtQuestionText')?.value || '').trim();
+  const image = (document.getElementById('doubtQuestionImage')?.value || '').trim();
+  const msg = document.getElementById('doubtSubmitMessage');
+  if (!text) {
+    if (msg) { msg.textContent = 'Please enter your question.'; msg.style.display = 'block'; }
+    return;
+  }
+  try {
+    await API.submitStudentDoubt(text, image || null);
+    if (msg) { msg.textContent = 'Doubt submitted successfully.'; msg.style.display = 'block'; }
+    closeDoubtModal();
+    await loadStudentDoubts();
+  } catch (err) {
+    if (msg) { msg.textContent = err.message || 'Could not submit doubt.'; msg.style.display = 'block'; }
+  }
 }
+
+function closeLoginModal() {
+  document.getElementById('loginModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function getStudentDashboardPath(student) {
+  const cls = String(student?.class || student?.cls || '').trim();
+  const dashboards = { '9': 'class9.html', '10': 'class10.html', '11': 'class11.html', '12': 'class12.html' };
+  return dashboards[cls] || 'index.html';
+}
+
+function redirectToStudentDashboard(student) {
+  const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
+  if (isHome) {
+    updateHomeForSession();
+    refreshRoleData().then(() => {
+      loadStudentResources();
+      loadStudentDoubts();
+    });
+    const studentTab = document.getElementById('studentDashTab');
+    if (studentTab) switchTab('student', studentTab);
+    document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  window.location.href = 'index.html#dashboards';
+}
+
+function redirectToParentDashboard() {
+  const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
+  if (isHome) {
+    updateHomeForSession();
+    refreshRoleData().then(() => {
+      loadStudentResources();
+      loadStudentDoubts();
+    });
+    const studentTab = document.getElementById('studentDashTab');
+    if (studentTab) switchTab('student', studentTab);
+    document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  window.location.href = 'index.html#dashboards';
+}
+
+function redirectToTeacherDashboard() {
+  const isHome = ['/index.html', '/', ''].includes(window.location.pathname);
+  if (isHome) {
+    updateHomeForSession();
+    const teacherTab = document.getElementById('teacherDashTab');
+    if (teacherTab) switchTab('teacher', teacherTab);
+    document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  window.location.href = 'index.html#dashboards';
+}
+
+function hasActiveStudentSession() { return !!localStorage.getItem('ilearn_token'); }
+function hasActiveParentSession() { return !!localStorage.getItem('ilearn_parent_token'); }
+function hasActiveTeacherSession() { return !!localStorage.getItem('ilearn_teacher_token'); }
+function redirectAuthenticatedUser() { return hasActiveStudentSession() || hasActiveParentSession() || hasActiveTeacherSession(); }
 
 function toggleProfileMenu() {
-  $('profilePanel')?.classList.toggle('open');
+  const panel = document.getElementById('profilePanel');
+  if (!panel) return;
+  panel.classList.toggle('open');
 }
 
-function closeProfileMenu() {
-  $('profilePanel')?.classList.remove('open');
-}
-
-function setLoginType(type) {
-  currentLoginType = type === 'teacher' ? 'teacher' : 'student';
-  $('ltab-student')?.classList.toggle('active', currentLoginType === 'student');
-  $('ltab-teacher')?.classList.toggle('active', currentLoginType === 'teacher');
-  $('loginStudentFields').style.display = currentLoginType === 'student' ? 'block' : 'none';
-  $('loginTeacherFields').style.display = currentLoginType === 'teacher' ? 'block' : 'none';
-  showMessage('loginErrorMessage', '');
-}
-
-function showRegisterStep(step) {
-  assessmentState.step = step;
-  $('regStep1').style.display = step === 1 ? 'block' : 'none';
-  $('regStep2').style.display = step === 2 ? 'block' : 'none';
-  $('regStep3').style.display = step === 3 ? 'block' : 'none';
-}
-
-function resetAssessment() {
-  assessmentState = {
-    step: 1,
-    questions: [],
-    answers: [],
-    index: 0,
-    studentDraft: null
-  };
-}
-
-function getSelectedClass() {
-  return $('regClass')?.value || '';
-}
-
-function updateSubjectVisibility() {
-  const studentClass = getSelectedClass();
-  const row = $('regSubjectRow');
-  if (!row) return;
-  row.style.display = studentClass === '11' || studentClass === '12' ? 'grid' : 'none';
-}
-
-function buildAssessmentQuestions(studentClass) {
-  const bank = classQuestionBank[studentClass] || classQuestionBank['10'];
-  return bank.map((item) => ({ ...item }));
-}
-
-function renderQuestion() {
-  const question = assessmentState.questions[assessmentState.index];
-  if (!question) return;
-
-  setText('testTitle', `Class ${assessmentState.studentDraft.class} Readiness Check`);
-  setText('testSubtitle', 'Answer a short diagnostic so the dashboard feels like your older flow again.');
-  setText('qProgress', `Question ${assessmentState.index + 1} of ${assessmentState.questions.length}`);
-  const percent = Math.round(((assessmentState.index + 1) / assessmentState.questions.length) * 100);
-  setText('qPct', `${percent}%`);
-  $('qProgFill').style.width = `${percent}%`;
-  $('prevBtn').style.display = assessmentState.index > 0 ? 'inline-block' : 'none';
-  $('nextBtn').textContent = assessmentState.index === assessmentState.questions.length - 1 ? 'Finish Test' : 'Next ->';
-
-  const selected = assessmentState.answers[assessmentState.index];
-  setHtml('questionArea', `
-    <div class="dash-widget" style="background:var(--dark3);padding:22px;">
-      <div style="font-size:0.78rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">${question.topic}</div>
-      <h3 style="font-family:'Syne',sans-serif;font-size:1.2rem;margin-bottom:18px;">${question.question}</h3>
-      <div style="display:grid;gap:12px;">
-        ${question.options.map((option, index) => `
-          <label style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:16px;border:1px solid ${selected === index ? 'rgba(255,45,120,0.45)' : 'rgba(255,255,255,0.08)'};background:${selected === index ? 'rgba(255,45,120,0.08)' : 'rgba(255,255,255,0.03)'};cursor:pointer;">
-            <input type="radio" name="assessmentOption" value="${index}" ${selected === index ? 'checked' : ''} onchange="selectAnswer(${index})" style="margin-top:3px;">
-            <span>${option}</span>
-          </label>
-        `).join('')}
-      </div>
-    </div>
-  `);
-}
-
-function selectAnswer(index) {
-  assessmentState.answers[assessmentState.index] = index;
-}
-
-function prevQ() {
-  if (assessmentState.index > 0) {
-    assessmentState.index -= 1;
-    renderQuestion();
-  }
-}
-
-function nextQ() {
-  if (typeof assessmentState.answers[assessmentState.index] !== 'number') {
-    alert('Please choose an answer before moving on.');
-    return;
-  }
-
-  if (assessmentState.index < assessmentState.questions.length - 1) {
-    assessmentState.index += 1;
-    renderQuestion();
-    return;
-  }
-
-  showAssessmentResult();
-}
-
-function buildTopicBreakdown() {
-  const summary = {};
-  assessmentState.questions.forEach((question, index) => {
-    const key = question.topic;
-    if (!summary[key]) summary[key] = { correct: 0, total: 0 };
-    summary[key].total += 1;
-    if (assessmentState.answers[index] === question.answer) summary[key].correct += 1;
-  });
-  return summary;
-}
-
-function showAssessmentResult() {
-  const total = assessmentState.questions.length;
-  const correct = assessmentState.questions.reduce((sum, question, index) => (
-    sum + (assessmentState.answers[index] === question.answer ? 1 : 0)
-  ), 0);
-  const percent = Math.round((correct / total) * 100);
-  const grade = percent >= 85 ? 'Excellent start' : percent >= 65 ? 'Strong potential' : 'Needs guided support';
-  const note = percent >= 85
-    ? 'You are ready for advanced practice and faster weekly targets.'
-    : percent >= 65
-      ? 'A few targeted improvements can quickly lift your score.'
-      : 'This is a good place to begin. We can build stronger basics from here.';
-
-  setText('resultScore', `${percent}%`);
-  setText('resultGrade', grade);
-  setText('resultNote', note);
-
-  const topicSummary = buildTopicBreakdown();
-  const strong = [];
-  const weak = [];
-  Object.entries(topicSummary).forEach(([topic, stats]) => {
-    const topicPercent = Math.round((stats.correct / stats.total) * 100);
-    if (topicPercent >= 70) strong.push(topic);
-    else weak.push(topic);
-  });
-
-  setHtml('resultGrid', `
-    <div class="rbox good">
-      <div class="rbox-title good">Strong Areas</div>
-      ${(strong.length ? strong : ['Building momentum']).map((item) => `<div class="rbox-item">${item}</div>`).join('')}
-    </div>
-    <div class="rbox weak">
-      <div class="rbox-title weak">Focus Next</div>
-      ${(weak.length ? weak : ['Revise mixed problems']).map((item) => `<div class="rbox-item">${item}</div>`).join('')}
-    </div>
-  `);
-
-  setHtml('topicBars', Object.entries(topicSummary).map(([topic, stats]) => {
-    const topicPercent = Math.round((stats.correct / stats.total) * 100);
-    return `
-      <div class="t-bar-wrap">
-        <div class="t-bar-top"><span>${topic}</span><span>${topicPercent}%</span></div>
-        <div class="t-bar"><div class="t-bar-fill" style="width:${topicPercent}%;background:linear-gradient(90deg,var(--pink),var(--purple));"></div></div>
-      </div>
-    `;
-  }).join(''));
-  setHtml('aiTip', `<strong>Suggested next move:</strong> Start with ${weak[0] || 'mixed revision'} this week, then reinforce ${strong[0] || 'core algebra'} through timed practice.`);
-
-  showRegisterStep(3);
-}
-
-async function startAssessment() {
-  const studentClass = getSelectedClass();
-  const payload = {
-    name: $('regName')?.value.trim() || '',
-    class: studentClass,
-    subject: $('regSubject')?.value || 'maths',
-    mobile: $('regMobile')?.value.trim() || '',
-    email: $('regEmail')?.value.trim() || '',
-    password: $('regPassword')?.value || ''
-  };
-
-  if (!payload.name || !payload.class || !payload.mobile || !payload.email || !payload.password) {
-    alert('Please complete all registration fields first.');
-    return;
-  }
-
-  try {
-    await API.registerStudent(payload);
-    assessmentState.studentDraft = payload;
-    assessmentState.questions = buildAssessmentQuestions(studentClass);
-    assessmentState.answers = Array(assessmentState.questions.length).fill(null);
-    assessmentState.index = 0;
-    showRegisterStep(2);
-    renderQuestion();
-  } catch (error) {
-    alert(error.message || 'Could not create the student account.');
-  }
+function updateAuthRequiredState() {
+  const closeBtn = document.querySelector('#loginModal .modal-close');
+  if (!closeBtn) return;
+  closeBtn.style.display = redirectAuthenticatedUser() ? '' : 'none';
 }
 
 async function loginStudentWithPassword() {
-  try {
-    await API.loginStudent(($('ls-email')?.value || '').trim(), $('ls-password')?.value || '');
-    closeLoginModal();
-    await loadStudentDashboard();
-  } catch (error) {
-    showMessage('loginErrorMessage', error.message || 'Could not login student.');
+  const email = (document.getElementById('ls-email')?.value || '').trim();
+  const password = (document.getElementById('ls-password')?.value || '').trim();
+  clearLoginError();
+  if (!email || !password) {
+    showLoginError('Please enter your student email and password.');
+    return;
   }
+  try {
+    const data = await API.loginStudent(email, password);
+    closeLoginModal();
+    redirectToStudentDashboard(data.student);
+  } catch (err) {
+    showLoginError(err.message || 'Student login failed');
+  }
+}
+
+function setLoginType(type) {
+  currentLoginType = type;
+  const groups = {
+    student: document.getElementById('loginStudentFields'),
+    teacher: document.getElementById('loginTeacherFields')
+  };
+  Object.entries(groups).forEach(([key, node]) => {
+    if (!node) return;
+    node.style.display = key === type ? 'flex' : 'none';
+    if (key === type) node.style.flexDirection = 'column';
+  });
+  ['student', 'teacher'].forEach((key) => {
+    document.getElementById('ltab-' + key)?.classList.toggle('active', key === type);
+  });
+}
+
+function flashInput(id, msg) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.style.borderColor = 'var(--pink)';
+    el.focus();
+    setTimeout(() => el.style.borderColor = '', 3000);
+  }
+  alert(msg);
+}
+
+// ── PARENT OTP LOGIN ──────────────────────────────────────────────────────────
+let currentLoginType = 'student';
+
+async function sendParentOTP() {
+  const raw = (document.getElementById('lp-mobile')?.value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 10) { flashInput('lp-mobile', 'Please enter a valid 10-digit mobile number.'); return; }
+  const sendBtn = document.querySelector('#parentStep-mobile .btn-primary');
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending OTP...'; }
+  try {
+    const data = await API.sendParentOTP(raw);
+    parentMobile = raw;
+    parentOTP = null;
+    document.getElementById('parentStep-mobile').style.display = 'none';
+    document.getElementById('parentStep-otp').style.display = 'flex';
+    document.getElementById('parentStep-otp').style.flexDirection = 'column';
+    document.getElementById('parentMobileDisplay').textContent = raw;
+    const info = data.studentFound
+      ? `OTP sent to ${raw} ✅\nStudent found: ${data.studentName || 'Your child'} (Class ${data.studentClass || '?'})\n\nEnter the OTP received on this number.`
+      : `OTP sent to ${raw} ✅\n\nEnter the OTP received on this number.`;
+    setTimeout(() => alert(info), 80);
+  } catch (err) {
+    showOTPError(err.message || 'Failed to send OTP. Please try again.');
+  } finally {
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send OTP 📱'; }
+  }
+}
+
+async function verifyParentOTP() {
+  const entered = (document.getElementById('lp-otp')?.value || '').trim();
+  const errEl = document.getElementById('parentOTPError');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (!entered) { showOTPError('Please enter the 4-digit OTP.'); return; }
+  if (!parentMobile) { showOTPError('Please request an OTP first.'); return; }
+  const verifyBtn = document.querySelector('#parentStep-otp .btn-primary');
+  if (verifyBtn) { verifyBtn.disabled = true; verifyBtn.textContent = 'Verifying...'; }
+  try {
+    const data = await API.verifyParentOTP(parentMobile, entered);
+    closeLoginModal();
+    parentOTP = null;
+    alert(`OTP verified! ✅\n\n${data.message || 'Redirecting to parent dashboard...'}`);
+    redirectToParentDashboard();
+  } catch (err) {
+    showOTPError(err.message || 'Incorrect OTP. Please try again.');
+    const input = document.getElementById('lp-otp');
+    if (input) { input.style.borderColor = '#FF2D78'; setTimeout(() => input.style.borderColor = '', 2500); }
+  } finally {
+    if (verifyBtn) { verifyBtn.disabled = false; verifyBtn.textContent = 'Verify & View Report →'; }
+  }
+}
+
+function resetParentOTP() {
+  parentOTP = null;
+  parentMobile = null;
+  const mobileStep = document.getElementById('parentStep-mobile');
+  const otpStep = document.getElementById('parentStep-otp');
+  const errEl = document.getElementById('parentOTPError');
+  const mInput = document.getElementById('lp-mobile');
+  const oInput = document.getElementById('lp-otp');
+  if (mobileStep) { mobileStep.style.display = 'flex'; mobileStep.style.flexDirection = 'column'; }
+  if (otpStep) otpStep.style.display = 'none';
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (mInput) mInput.value = '';
+  if (oInput) oInput.value = '';
+}
+
+async function handleCredentialResponse(response) {
+  clearLoginError();
+  if (!response?.credential) { showLoginError('Google login failed. Please try again.'); return; }
+  try {
+    if (currentLoginType === 'teacher') {
+      const data = await API.loginTeacherWithGoogle(response.credential);
+      closeLoginModal();
+      localStorage.setItem('ilearn_teacher', JSON.stringify(data.teacher || {}));
+      redirectToTeacherDashboard();
+      return;
+    }
+    const data = await API.loginStudentWithGoogle(response.credential);
+    closeLoginModal();
+    redirectToStudentDashboard(data.student);
+  } catch (err) {
+    showLoginError(err.message || 'Google login failed');
+  }
+}
+
+// ── REGISTER MODAL ────────────────────────────────────────────────────────────
+function openRegisterModal() {
+  document.getElementById('registerModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  showRegStep(1);
+  assessAnswers = {};
+  currentQ = 0;
+  syncRegisterSubjectVisibility();
+}
+function closeRegisterModal() {
+  document.getElementById('registerModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function showRegStep(n) {
+  ['regStep1', 'regStep2', 'regStep3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (i === n - 1) ? 'flex' : 'none';
+    if (el && i === n - 1) el.style.flexDirection = 'column';
+  });
+}
+function syncRegisterSubjectVisibility() {
+  const clsEl = document.getElementById('regClass');
+  const row = document.getElementById('regSubjectRow');
+  const subjectEl = document.getElementById('regSubject');
+  if (!clsEl || !row || !subjectEl) return;
+  const needsSubject = clsEl.value === '11' || clsEl.value === '12';
+  row.style.display = needsSubject ? 'flex' : 'none';
+  if (!needsSubject) subjectEl.value = '';
+}
+const regClassField = document.getElementById('regClass');
+if (regClassField) regClassField.addEventListener('change', syncRegisterSubjectVisibility);
+
+// ── CLASS-SPECIFIC QUESTIONS ──────────────────────────────────────────────────
+const classQuestions = {
+  '9': [
+    { q: 'Which of the following is an irrational number?', opts: ['√4', '√9', '√2', '√16'], ans: 2, topic: 'Real Numbers' },
+    { q: 'Solve: 2x + 5 = 13. Find x.', opts: ['3', '4', '5', '6'], ans: 1, topic: 'Algebra' },
+    { q: 'If A={1,2,3} and B={2,3,4}, then A ∩ B = ?', opts: ['{1}', '{4}', '{2,3}', '{1,2,3,4}'], ans: 2, topic: 'Set Language' },
+    { q: 'In a triangle, if two angles are 60° and 70°, the third is:', opts: ['40°', '50°', '60°', '70°'], ans: 1, topic: 'Geometry' },
+    { q: 'sin(30°) = ?', opts: ['1', '√3/2', '1/2', '1/√2'], ans: 2, topic: 'Trigonometry' },
+    { q: 'Area of circle with radius 7 cm (π=22/7):', opts: ['44 cm²', '154 cm²', '49 cm²', '22 cm²'], ans: 1, topic: 'Mensuration' },
+    { q: 'Distance between (0,0) and (3,4) is:', opts: ['5', '7', '12', '25'], ans: 0, topic: 'Coordinate Geometry' },
+    { q: 'Mean of 5, 10, 15, 20, 25 is:', opts: ['10', '15', '20', '25'], ans: 1, topic: 'Statistics' },
+    { q: 'A bag has 3 red and 2 blue balls. P(red) = ?', opts: ['2/5', '3/5', '1/5', '3/2'], ans: 1, topic: 'Probability' },
+    { q: 'Volume of a cube with side 4 cm is:', opts: ['16 cm³', '24 cm³', '48 cm³', '64 cm³'], ans: 3, topic: 'Mensuration' },
+  ],
+  '10': [
+    { q: 'HCF of 12 and 18 is:', opts: ['2', '3', '6', '9'], ans: 2, topic: 'Real Numbers' },
+    { q: 'Roots of x² − 5x + 6 = 0 are:', opts: ['2, 3', '1, 6', '−2, −3', '2, −3'], ans: 0, topic: 'Algebra' },
+    { q: 'If f(x) = 2x + 1, then f(3) = ?', opts: ['5', '6', '7', '8'], ans: 2, topic: 'Relations and Functions' },
+    { q: 'tan(45°) = ?', opts: ['0', '1/√3', '1', '√3'], ans: 2, topic: 'Trigonometry' },
+    { q: 'Slope of line joining (1,2) and (3,6) is:', opts: ['1', '2', '3', '4'], ans: 1, topic: 'Coordinate Geometry' },
+    { q: 'In a 3-4-5 right triangle, hypotenuse is:', opts: ['3', '4', '5', '6'], ans: 2, topic: 'Geometry' },
+    { q: 'Number of tangents from external point to a circle:', opts: ['0', '1', '2', '3'], ans: 2, topic: 'Geometry' },
+    { q: 'Volume of sphere radius 3 (π=22/7):', opts: ['28π', '36π', '48π', '54π'], ans: 1, topic: 'Mensuration' },
+    { q: 'Standard deviation measures:', opts: ['Average', 'Spread', 'Frequency', 'Range'], ans: 1, topic: 'Statistics' },
+    { q: 'P(A)=0.4, P(B)=0.5, P(A∩B)=0.2. P(A∪B)=?', opts: ['0.5', '0.6', '0.7', '0.9'], ans: 2, topic: 'Probability' },
+  ],
+  '11': [
+    { q: 'If A has 5 elements, number of subsets = ?', opts: ['16', '25', '32', '64'], ans: 2, topic: 'Sets' },
+    { q: 'Value of i² is:', opts: ['1', '−1', 'i', '−i'], ans: 1, topic: 'Complex Numbers' },
+    { q: 'lim(x→0) sin(x)/x = ?', opts: ['0', '∞', '1', '−1'], ans: 2, topic: 'Limits' },
+    { q: 'd/dx (x⁴) = ?', opts: ['x³', '4x³', '4x', '3x³'], ans: 1, topic: 'Differentiation' },
+    { q: '⁵P₂ = ?', opts: ['10', '15', '20', '25'], ans: 2, topic: 'Permutations' },
+    { q: '⁵C₂ = ?', opts: ['5', '10', '15', '20'], ans: 1, topic: 'Combinations' },
+    { q: 'sin²θ + cos²θ = ?', opts: ['0', '1', '2', 'tan²θ'], ans: 1, topic: 'Trigonometry' },
+    { q: 'Slope of 3x − 4y + 5 = 0 is:', opts: ['3/4', '−3/4', '4/3', '−4/3'], ans: 0, topic: 'Lines' },
+    { q: 'Matrix [[1,0],[0,1]] is called:', opts: ['Zero', 'Identity', 'Scalar', 'Diagonal'], ans: 1, topic: 'Matrices' },
+    { q: 'Mean of first 10 natural numbers:', opts: ['4.5', '5', '5.5', '6'], ans: 2, topic: 'Statistics' },
+  ],
+  '12': [
+    { q: '∫ x² dx = ?', opts: ['x³', 'x³/3 + C', '2x', '3x²'], ans: 1, topic: 'Integration' },
+    { q: 'd/dx (e^x) = ?', opts: ['xe^(x−1)', 'e^x', 'e^(x−1)', '0'], ans: 1, topic: 'Differentiation' },
+    { q: '|A| for A=[[2,1],[4,3]] is:', opts: ['2', '6', '8', '10'], ans: 0, topic: 'Matrices' },
+    { q: 'Order of y″ + y′ = x is:', opts: ['1', '2', '3', '0'], ans: 1, topic: 'Differential Equations' },
+    { q: 'P(A|B) when P(A∩B)=0.2, P(B)=0.4:', opts: ['0.2', '0.4', '0.5', '0.8'], ans: 2, topic: 'Probability' },
+    { q: 'If a × b = 0, vectors are:', opts: ['Perpendicular', 'Parallel', 'Equal', 'Opposite'], ans: 1, topic: 'Vectors' },
+    { q: '∫₀¹ x dx = ?', opts: ['0', '1/2', '1', '2'], ans: 1, topic: 'Definite Integrals' },
+    { q: 'Inverse of f(x) = 2x + 3 is:', opts: ['(x−3)/2', '(x+3)/2', '2x−3', '(3−x)/2'], ans: 0, topic: 'Relations and Functions' },
+    { q: 'Linear programming finds:', opts: ['Average value', 'Optimal value', 'Exact value', 'Random value'], ans: 1, topic: 'Linear Programming' },
+    { q: 'In binomial dist, n=10, p=0.4, mean=?', opts: ['2', '4', '6', '8'], ans: 1, topic: 'Probability Distributions' },
+  ]
+};
+
+let assessAnswers = {};
+let currentQ = 0;
+let activeQuestions = [];
+let studentData = {};
+
+async function startAssessment() {
+  const name = (document.getElementById('regName')?.value || '').trim();
+  const cls = (document.getElementById('regClass')?.value || '').trim();
+  const subject = (document.getElementById('regSubject')?.value || '').trim();
+  const mobile = (document.getElementById('regMobile')?.value || '').trim();
+  const email = (document.getElementById('regEmail')?.value || '').trim();
+  const password = (document.getElementById('regPassword')?.value || '').trim();
+
+  if (!name) { flashField('regName', 'Please enter student name.'); return; }
+  if (!cls) { flashField('regClass', 'Please select your class.'); return; }
+  if ((cls === '11' || cls === '12') && !subject) { flashField('regSubject', 'Please choose Maths or Business Maths.'); return; }
+  if (mobile.replace(/\D/g, '').length < 10) { flashField('regMobile', 'Enter valid 10-digit mobile.'); return; }
+  if (!email || !email.includes('@')) { flashField('regEmail', 'Enter valid email address.'); return; }
+  if (password.length < 6) { flashField('regPassword', 'Password must be at least 6 characters.'); return; }
+
+  try {
+    await API.registerStudent(name, cls, mobile, email, password, subject || 'maths');
+  } catch (err) {
+    alert(err.message || 'Registration failed. Please try again.');
+    return;
+  }
+
+  studentData = { name, cls, class: cls, subject: subject || 'maths', mobile, email };
+  localStorage.setItem('ilearn_student', JSON.stringify(studentData));
+  activeQuestions = classQuestions[cls] || classQuestions['9'];
+  assessAnswers = {};
+  currentQ = 0;
+  document.getElementById('testTitle').textContent = 'Class ' + cls + ' Diagnostic Test';
+  document.getElementById('testSubtitle').textContent = 'Answer all 10 questions - ' + name;
+  showRegStep(2);
+  renderQuestion();
+}
+
+function flashField(id, msg) {
+  const el = document.getElementById(id);
+  if (el) { el.style.borderColor = '#FF2D78'; el.focus(); setTimeout(() => el.style.borderColor = '', 3000); }
+  alert(msg);
+}
+
+function renderQuestion() {
+  const q = activeQuestions[currentQ];
+  const total = activeQuestions.length;
+  const pct = Math.round(currentQ / total * 100);
+  document.getElementById('qProgress').textContent = 'Question ' + (currentQ + 1) + ' of ' + total;
+  document.getElementById('qPct').textContent = pct + '%';
+  document.getElementById('qProgFill').style.width = pct + '%';
+  document.getElementById('prevBtn').style.display = currentQ > 0 ? 'inline-block' : 'none';
+  document.getElementById('nextBtn').textContent = currentQ === total - 1 ? 'Submit' : 'Next →';
+  const sel = assessAnswers[currentQ];
+  document.getElementById('questionArea').innerHTML = `
+    <div style="background:var(--dark3);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:20px;">
+      <div style="font-size:0.7rem;color:var(--pink);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">${q.topic}</div>
+      <div style="font-size:0.94rem;line-height:1.6;margin-bottom:16px;color:var(--text);">${currentQ + 1}. ${q.q}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${q.opts.map((opt, i) => `
+          <div onclick="selectQ(${i})" style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:${sel === i ? 'rgba(255,45,120,0.12)' : 'rgba(255,255,255,0.02)'};border:1px solid ${sel === i ? 'var(--pink)' : 'rgba(255,255,255,0.08)'};border-radius:10px;cursor:pointer;font-size:0.88rem;transition:all 0.2s;">
+            <div style="width:16px;height:16px;border-radius:50%;border:2px solid ${sel === i ? 'var(--pink)' : 'rgba(255,255,255,0.25)'};background:${sel === i ? 'var(--pink)' : 'transparent'};flex-shrink:0;transition:all 0.2s;"></div>
+            ${opt}
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function selectQ(idx) { assessAnswers[currentQ] = idx; renderQuestion(); }
+function nextQ() {
+  if (assessAnswers[currentQ] === undefined) { alert('Please select an answer before continuing.'); return; }
+  if (currentQ === activeQuestions.length - 1) { showResult(); } else { currentQ++; renderQuestion(); }
+}
+function prevQ() { if (currentQ > 0) { currentQ--; renderQuestion(); } }
+
+function showResult() {
+  const total = activeQuestions.length;
+  const correct = activeQuestions.filter((q, i) => assessAnswers[i] === q.ans).length;
+  const pct = Math.round(correct / total * 100);
+  const topicScores = {};
+  activeQuestions.forEach((q, i) => {
+    if (!topicScores[q.topic]) topicScores[q.topic] = { c: 0, t: 0 };
+    topicScores[q.topic].t++;
+    if (assessAnswers[i] === q.ans) topicScores[q.topic].c++;
+  });
+  const weakTopics = Object.entries(topicScores).filter(([, s]) => s.c / s.t < 0.6).map(([t]) => t);
+  const strongTopics = Object.entries(topicScores).filter(([, s]) => s.c / s.t >= 0.8).map(([t]) => t);
+  const scoreCol = pct >= 70 ? '#00E5A0' : pct >= 50 ? '#FFD166' : '#FF2D78';
+  const grade = pct >= 80 ? 'Excellent 🏆' : pct >= 60 ? 'Good 👍' : pct >= 40 ? 'Average 💪' : 'Needs Work 📚';
+
+  document.getElementById('resultScore').innerHTML = '<span style="color:' + scoreCol + '">' + pct + '%</span>';
+  document.getElementById('resultGrade').textContent = grade;
+  document.getElementById('resultNote').textContent = correct + ' of ' + total + ' correct • Class ' + studentData.cls + ' Diagnostic';
+  document.getElementById('resultGrid').innerHTML =
+    '<div class="rbox good"><div class="rbox-title good">✓ Strong Topics</div>' +
+    (strongTopics.length ? strongTopics.map(t => '<div class="rbox-item">• ' + t + '</div>').join('') : '<div class="rbox-item">Keep practicing!</div>') + '</div>' +
+    '<div class="rbox weak"><div class="rbox-title weak">⚠ Needs Focus</div>' +
+    (weakTopics.length ? weakTopics.map(t => '<div class="rbox-item">• ' + t + '</div>').join('') : '<div class="rbox-item">Great performance!</div>') + '</div>';
+  document.getElementById('topicBars').innerHTML = Object.entries(topicScores).map(([topic, s]) => {
+    const p = Math.round(s.c / s.t * 100);
+    const col = p >= 70 ? '#00E5A0' : p >= 50 ? '#FFD166' : '#FF2D78';
+    return '<div class="t-bar-wrap"><div class="t-bar-top"><span>' + topic + '</span><span style="color:' + col + '">' + p + '%</span></div><div class="t-bar"><div class="t-bar-fill" style="width:' + p + '%;background:' + col + '"></div></div></div>';
+  }).join('');
+  document.getElementById('aiTip').innerHTML = '🤖 <strong>AI Recommendation:</strong> Focus extra time on <strong>' + (weakTopics.length ? weakTopics.slice(0, 2).join(' and ') : 'all topics equally') + '</strong>. Use the AI Timetable Generator to build your personalised study plan.';
+  showRegStep(3);
+}
+
+// ── AI CHATBOT ────────────────────────────────────────────────────────────────
+const chatHistory = [];
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const chatBody = document.getElementById('chatBody');
+  if (!input || !chatBody) return;
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  chatHistory.push({ role: 'user', content: q });
+  chatBody.innerHTML += `<div class="msg user"><div class="msg-ava" style="background:rgba(255,45,120,0.2)">👤</div><div class="msg-bubble">${esc(q)}</div></div>`;
+  const tid = 'typing_' + Date.now();
+  chatBody.innerHTML += `<div class="msg bot" id="${tid}"><div class="msg-ava">🤖</div><div class="typing"><span></span><span></span><span></span></div></div>`;
+  chatBody.scrollTop = chatBody.scrollHeight;
+  try {
+    const data = await API.sendChatMessage(q);
+    const reply = data.reply || 'Sorry, please try again!';
+    chatHistory.push({ role: 'assistant', content: reply });
+    if (data.sessionKey) localStorage.setItem('ilearn_chat_session', data.sessionKey);
+    document.getElementById(tid)?.remove();
+    chatBody.innerHTML += `<div class="msg bot"><div class="msg-ava">🤖</div><div class="msg-bubble">${fmt(reply)}</div></div>`;
+  } catch (e) {
+    document.getElementById(tid)?.remove();
+    chatBody.innerHTML += `<div class="msg bot"><div class="msg-ava">🤖</div><div class="msg-bubble">${fmt(e.message || 'Connection error. Please try again.')}</div></div>`;
+  }
+  chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function fmt(t) {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+}
+
+document.addEventListener('click', (event) => {
+  const menu = document.getElementById('profileMenu');
+  const panel = document.getElementById('profilePanel');
+  if (!menu || !panel) return;
+  if (!menu.contains(event.target)) panel.classList.remove('open');
+});
+
+function getStoredProfileState(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch { return {}; }
+}
+
+function getCurrentRole() {
+  if (hasActiveTeacherSession()) return 'teacher';
+  if (hasActiveStudentSession()) return 'student';
+  if (hasActiveParentSession()) return 'parent';
+  return null;
+}
+
+function getProfileData() {
+  const role = getCurrentRole();
+  if (!role) return null;
+  if (role === 'student') {
+    const data = getStoredProfileState('ilearn_student_profile');
+    const student = data.student || getStoredProfileState('ilearn_student');
+    const present = Number(data.attendance?.present || 0);
+    const total = Number(data.totalAttendance?.total || 0);
+    const percentage = total ? Math.round((present / total) * 1000) / 10 : 0;
+    return {
+      role, title: student.name || 'Student', subtitle: 'Student',
+      items: [
+        { label: 'Role', value: 'Student' },
+        { label: 'Class', value: student.class ? 'Class ' + student.class : 'Not available' },
+        { label: 'Email', value: student.email || 'Not available' },
+        { label: 'Attendance', value: total ? `${percentage}% (${present}/${total})` : 'No attendance yet' }
+      ]
+    };
+  }
+  if (role === 'parent') {
+    const data = getStoredProfileState('ilearn_parent_profile');
+    const student = data.student || getStoredProfileState('ilearn_parent_student');
+    const monthAtt = data.report?.attendanceSummary?.month || data.report?.attendance || data.attendance || {};
+    const present = Number(monthAtt.present || 0);
+    const total = Number(monthAtt.total || 0);
+    const percentage = total ? Math.round((present / total) * 1000) / 10 : 0;
+    return {
+      role, title: 'Parent', subtitle: student.name ? 'Parent of ' + student.name : 'Parent',
+      items: [
+        { label: 'Role', value: 'Parent' },
+        { label: 'Student', value: student.name || 'Linked student' },
+        { label: 'Class', value: student.class ? 'Class ' + student.class : 'Not available' },
+        { label: 'Email', value: student.email || 'Not available' },
+        { label: 'Subject', value: student.subject || 'Maths' },
+        { label: 'Board', value: student.board || 'Not available' },
+        { label: 'Attendance', value: total ? `${percentage}% (${present}/${total})` : 'No attendance yet' }
+      ]
+    };
+  }
+  const teacher = getStoredProfileState('ilearn_teacher');
+  return {
+    role, title: teacher.name || 'Teacher', subtitle: 'Teacher',
+    items: [
+      { label: 'Role', value: 'Teacher' },
+      { label: 'Name', value: teacher.name || 'Master Maths Staff' },
+      { label: 'Email', value: teacher.email || 'Not available' },
+      { label: 'Access', value: 'Teacher Dashboard' }
+    ]
+  };
+}
+
+function renderNavProfile() {
+  const profileMenu = document.getElementById('profileMenu');
+  const profilePanel = document.getElementById('profilePanel');
+  const loginBtn = document.getElementById('navLoginBtn');
+  const registerBtn = document.getElementById('navRegisterBtn');
+  const profile = getProfileData();
+  if (!profileMenu || !profilePanel || !loginBtn || !registerBtn) return;
+  if (!profile) {
+    profileMenu.style.display = 'none';
+    loginBtn.style.display = '';
+    registerBtn.style.display = '';
+    profilePanel.classList.remove('open');
+    return;
+  }
+  loginBtn.style.display = 'none';
+  registerBtn.style.display = 'none';
+  profileMenu.style.display = 'block';
+  const logoutFn = profile.role === 'student' ? 'API.logoutStudent()' : (profile.role === 'parent' ? 'API.logoutParent()' : 'API.logoutTeacher()');
+  profilePanel.innerHTML = `
+    <h4>${profile.title}</h4>
+    <p>${profile.subtitle}</p>
+    ${profile.items.map((item) => `<div class="profile-row"><div class="profile-label">${item.label}</div><div class="profile-value">${item.value}</div></div>`).join('')}
+    <button class="profile-logout" onclick="${logoutFn}">Logout</button>
+  `;
 }
 
 async function loginTeacher() {
+  const email = (document.getElementById('lt-email')?.value || '').trim();
+  const password = (document.getElementById('lt-password')?.value || '').trim();
+  clearLoginError();
+  if (!email || !password) { showLoginError('Please enter the teacher email and password.'); return; }
   try {
-    await API.loginTeacher(($('lt-email')?.value || '').trim(), $('lt-password')?.value || '');
+    const data = await API.loginTeacher(email, password);
     closeLoginModal();
-    await loadTeacherDashboard();
-  } catch (error) {
-    showMessage('loginErrorMessage', error.message || 'Could not login teacher.');
+    localStorage.setItem('ilearn_teacher', JSON.stringify(data.teacher || {}));
+    redirectToTeacherDashboard();
+  } catch (err) {
+    showLoginError(err.message || 'Teacher login failed');
   }
 }
 
-function updateRoleVisibility(role) {
-  document.querySelectorAll('.role-student-only').forEach((node) => {
-    node.style.display = role === 'teacher' ? 'none' : '';
-  });
-  document.querySelectorAll('.role-teacher-only').forEach((node) => {
-    node.style.display = role === 'teacher' ? '' : 'none';
-  });
-
-  const loginBtn = $('navLoginBtn');
-  const registerBtn = $('navRegisterBtn');
-  const profileMenu = $('profileMenu');
-  if (role) {
-    if (loginBtn) loginBtn.style.display = 'none';
-    if (registerBtn) registerBtn.style.display = 'none';
-    if (profileMenu) profileMenu.style.display = 'block';
-  } else {
-    if (loginBtn) loginBtn.style.display = '';
-    if (registerBtn) registerBtn.style.display = '';
-    if (profileMenu) profileMenu.style.display = 'none';
+// ── PARENT DASHBOARD REFRESH ──────────────────────────────────────────────────
+async function refreshParentDashboard() {
+  if (!hasActiveParentSession()) return;
+  try {
+    // Single API call gets everything the parent tab needs
+    const apiResponse = await API.getParentReport();
+ 
+    // apiResponse shape from server:
+    // { student, report: { ...all fields }, ...flatFields (same fields at top level) }
+    const student = apiResponse.student || {};
+    const report  = apiResponse.report  || apiResponse; // works whether nested or flat
+ 
+    // Persist for offline reads by updateDashboardAttendanceCards
+    localStorage.setItem('ilearn_parent_profile',  JSON.stringify(apiResponse));
+    localStorage.setItem('ilearn_parent_student',  JSON.stringify(student));
+ 
+    // ── Inject all data into the parent tab widgets ──
+    // injectParentTabData in dashboard-auth.js accepts the raw API response
+    // and handles both the nested (report.report.X) and flat (report.X) shapes.
+    if (typeof injectParentTabData === 'function') {
+      injectParentTabData(apiResponse, student);
+    }
+ 
+    // ── Update the top-level welcome/attendance cards ──
+    updateDashboardAttendanceCards();
+    renderNavProfile();
+ 
+  } catch (err) {
+    console.warn('Parent dashboard refresh failed:', err.message || err);
   }
 }
 
-function buildProfilePanel(profile) {
-  const role = currentRole();
-  if (!profile) return;
-  setHtml('profilePanel', `
-    <h4>${profile.name || 'I LEARN User'}</h4>
-    <p>${role === 'teacher' ? 'Teacher access to attendance, fee, and weekly test workflows.' : 'Student access to your live dashboard and reports.'}</p>
-    <div class="profile-row">
-      <div class="profile-label">Role</div>
-      <div class="profile-value">${role === 'teacher' ? 'Teacher' : 'Student'}</div>
-    </div>
-    <div class="profile-row">
-      <div class="profile-label">${role === 'teacher' ? 'Email' : 'Class'}</div>
-      <div class="profile-value">${role === 'teacher' ? (profile.email || '-') : `Class ${profile.class || '--'}`}</div>
-    </div>
-    <div class="profile-row">
-      <div class="profile-label">${role === 'teacher' ? 'Access' : 'Email'}</div>
-      <div class="profile-value">${role === 'teacher' ? 'Dashboard Controls' : (profile.email || '-')}</div>
-    </div>
-    <button class="profile-logout" onclick="logoutCurrentUser()">Logout</button>
-  `);
+function deriveParentReportFromStudentState() {
+  const studentProfile = getStoredProfileState('ilearn_student_profile');
+  if (!Object.keys(studentProfile || {}).length) return {};
+  return buildStudentParentView(studentProfile);
 }
 
-function switchTab(tab, button) {
-  currentTab = tab === 'teacher' ? 'teacher' : 'student';
-  document.querySelectorAll('.dash-tab').forEach((node) => node.classList.remove('active'));
-  if (button) button.classList.add('active');
-  $('tab-student')?.classList.toggle('active', currentTab === 'student');
-  $('tab-teacher')?.classList.toggle('active', currentTab === 'teacher');
+function buildStudentParentView(profile) {
+  const student = profile.student || {};
+  const latestAssessment = profile.latestAssessment || null;
+  const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
+  const weakTopics = latestAssessment?.weak_topics ? JSON.parse(latestAssessment.weak_topics || '[]') : [];
+  const strongTopics = latestAssessment?.strong_topics ? JSON.parse(latestAssessment.strong_topics || '[]') : [];
+  const dailyMcqSet = profile.dailyMcqSet || { questions: [] };
+  const recentMcqs = Array.isArray(dailyMcqSet.questions)
+    ? dailyMcqSet.questions.filter((item) => item.selected_index !== null && item.selected_index !== undefined)
+    : [];
+  const report = {
+    student,
+    latestAssessment,
+    attendance: profile.attendance || {},
+    totalAttendance: profile.totalAttendance || {},
+    attendanceSummary: profile.attendanceSummary || {},
+    weeklySummary: profile.weeklySummary || null,
+    dailyMcqSet,
+    questionPapers: profile.questionPapers || [],
+    weeklyTests: profile.weeklyTests || [],
+    feeSummary: profile.feeSummary || null,
+    mcqStreak: profile.mcqStreak || 0,
+    topicScores,
+    weakTopics,
+    strongTopics,
+    recentMcqs: profile.recentMcqs || recentMcqs
+  };
+  return { student, report, ...report };
 }
 
-function renderStudentTopics(profile) {
-  const weeklyTests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
-  if (!weeklyTests.length) {
-    setHtml('parentTopicProgress', '<div style="color:var(--muted);font-size:0.88rem;">Topic-wise progress will appear after a few weekly tests are entered.</div>');
-    setHtml('parentStrongTopics', '<span style="color:#8888AA;font-size:0.88rem;">Build weekly test history first.</span>');
-    setHtml('parentWeakTopics', '<span style="color:#8888AA;font-size:0.88rem;">Weak areas will show here automatically.</span>');
-    return;
-  }
-
-  const average = Math.round(weeklyTests.reduce((sum, item) => {
-    const total = Number(item.total_marks || 0);
-    const marks = Number(item.marks_obtained || 0);
-    return sum + (total ? (marks / total) * 100 : 0);
-  }, 0) / weeklyTests.length);
-
-  const attendancePercent = Number(profile.attendanceSummary?.overall?.percentage || 0);
-  const strongTopics = [];
-  const weakTopics = [];
-
-  if (average >= 75) strongTopics.push('Weekly test accuracy');
-  else weakTopics.push('Timed weekly test practice');
-  if (attendancePercent >= 85) strongTopics.push('Consistency and attendance');
-  else weakTopics.push('Attendance follow-up');
-  if ((profile.feeSummary?.pending || 0) === 0) strongTopics.push('Fee status is clear');
-  else weakTopics.push('Fee follow-up pending');
-
-  setHtml('parentTopicProgress', `
-    <div class="progress-bar-wrap">
-      <div class="progress-label"><span>Average Weekly Test Score</span><span>${average}%</span></div>
-      <div class="progress-bar"><div class="progress-fill purple" style="width:${average}%"></div></div>
-    </div>
-    <div class="progress-bar-wrap">
-      <div class="progress-label"><span>Attendance Consistency</span><span>${attendancePercent}%</span></div>
-      <div class="progress-bar"><div class="progress-fill blue" style="width:${attendancePercent}%"></div></div>
-    </div>
-  `);
-  setHtml('parentStrongTopics', strongTopics.map((item) => `<div class="alert-pill blue"><div class="alert-title blue">${item}</div><div class="alert-desc">Doing well in this area.</div></div>`).join(''));
-  setHtml('parentWeakTopics', weakTopics.map((item) => `<div class="alert-pill pink"><div class="alert-title pink">${item}</div><div class="alert-desc">Keep focusing here this week.</div></div>`).join(''));
-}
-
-function renderStudentWeeklyTests(profile) {
-  const weeklyTests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
-  setHtml('parentWeeklyTests', weeklyTests.length
-    ? weeklyTests.slice(0, 5).map((test) => `
-        <div class="metric-row">
-          <div>
-            <div class="metric-value">${test.title}</div>
-            <div class="metric-label">${test.test_date || ''}${test.notes ? ` - ${test.notes}` : ''}</div>
-          </div>
-          <span class="metric-value">${Number(test.marks_obtained || 0)}/${Number(test.total_marks || 0)}</span>
-        </div>
-      `).join('')
-    : '<div style="color:var(--muted);font-size:0.88rem;">Weekly test marks will appear here once teachers enter them.</div>');
-}
-
-function renderStudentTimetable() {
-  setHtml('studentTodayTimetable', `
-    <div class="tt-slot">
-      <div class="tt-dot" style="background:var(--blue)"></div>
-      <div class="tt-time">Focus</div>
-      <div>Revise one weak topic and solve 5 mixed problems today.</div>
-    </div>
-    <div class="tt-slot">
-      <div class="tt-dot" style="background:var(--green)"></div>
-      <div class="tt-time">Test</div>
-      <div>Review the latest weekly test corrections before the next class.</div>
-    </div>
-  `);
-}
-
-function calculateStreak(profile) {
-  const streak = Number(profile.attendanceStreak || 0);
-  if (streak >= 2) return `${streak} days`;
-  if (streak === 1) return '1 day';
-  return '0 days';
-}
-
-async function loadStudentDashboard() {
-  updateRoleVisibility('student');
-  switchTab('student', $('studentDashTab'));
-  document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
+async function refreshStudentParentDashboard() {
+  if (!hasActiveStudentSession()) return;
   try {
     const profile = await API.getStudentProfile();
     localStorage.setItem('ilearn_student_profile', JSON.stringify(profile));
-
-    setText('dashboardWelcomeName', profile.student?.name || 'Learner');
-    setText('dashboardWelcomeRole', 'Signed in as student');
-    setText('dashboardWelcomeUpdated', `Last updated: ${formatUpdated()}`);
-    setText('studentAttendanceMonth', `${profile.attendanceSummary?.month?.present || 0} / ${profile.attendanceSummary?.month?.total || 0} days`);
-    setText('studentAttendanceOverall', `${profile.attendanceSummary?.overall?.percentage || 0}%`);
-    setText('studentAttendanceProgressLabel', `${profile.attendanceSummary?.overall?.percentage || 0}%`);
-    $('studentAttendanceProgress').style.width = `${Math.max(0, Math.min(100, Number(profile.attendanceSummary?.overall?.percentage || 0)))}%`;
-    setText('studentAttendanceHint', profile.attendanceSummary?.overall?.total
-      ? `Overall attendance: ${profile.attendanceSummary.overall.present}/${profile.attendanceSummary.overall.total} classes marked.`
-      : 'Login to see your live attendance summary.');
-    setText('studentAttendanceUpdated', `Last updated: ${formatUpdated()}`);
-
-    setText('studentStreakValue', calculateStreak(profile));
-    setText('studentStreakUpdated', `Last updated: ${formatUpdated()}`);
-
-    const fee = profile.feeSummary || {};
-    setText('parentFeeBatch', profile.student?.class ? `Class ${profile.student.class}` : 'Class --');
-    setText('parentFeeStatus', fee.totalDue ? (fee.pending > 0 ? `Rs ${fee.pending} pending` : 'Paid up') : 'No entries yet');
-    setText('parentFeePaid', `Rs ${fee.totalPaid || 0}`);
-    setText('parentFeePending', `Rs ${fee.pending || 0}`);
-    const lastPayment = Array.isArray(fee.payments) && fee.payments.length ? fee.payments[0] : null;
-    setHtml('parentFeeLastPaid', `<span class="metric-label">Last Paid</span><span class="metric-value">${lastPayment ? `${lastPayment.paid_on} - Rs ${lastPayment.amount_paid}` : '-'}</span>`);
-    setText('parentFeeUpdated', `Last updated: ${formatUpdated()}`);
-
-    renderStudentWeeklyTests(profile);
-    setText('parentWeeklyTestsUpdated', `Last updated: ${formatUpdated()}`);
-    renderStudentTopics(profile);
-    renderStudentTimetable();
-    setHtml('studentDoubtList', '<div style="color:var(--muted);font-size:0.9rem;">Doubt reply history can be connected next on top of this PostgreSQL flow.</div>');
-
-    buildProfilePanel(profile.student);
-  } catch (error) {
-    setText('dashboardWelcomeName', 'Learner');
-    setText('dashboardWelcomeRole', 'Student session needs attention');
-    setText('dashboardWelcomeUpdated', `Last updated: ${formatUpdated()}`);
-    setText('studentAttendanceHint', error.message || 'Could not load the student dashboard.');
-    showMessage('loginErrorMessage', error.message || 'Could not load student dashboard.');
+    if (!Object.keys(profile || {}).length) return;
+    const parentView = buildStudentParentView(profile);
+    localStorage.setItem('ilearn_parent_profile', JSON.stringify(parentView));
+    localStorage.setItem('ilearn_parent_student', JSON.stringify(parentView.student || {}));
+    if (typeof injectParentTabData === 'function') {
+      injectParentTabData(parentView.report, parentView.student);
+    }
+    updateDashboardAttendanceCards();
+    renderNavProfile();
+  } catch (err) {
+    console.warn('Student dashboard support refresh failed:', err.message || err);
   }
 }
 
-function renderTeacherAttendanceTable() {
-  if (!teacherStudents.length) {
-    setHtml('teacherAttendanceBody', '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students registered yet.</td></tr>');
-    return;
+async function refreshRoleData() {
+  const role = getCurrentRole();
+  try {
+    if (role === 'student') {
+      const profile = await API.getStudentProfile();
+      localStorage.setItem('ilearn_student_profile', JSON.stringify(profile));
+      const parentView = buildStudentParentView(profile);
+      localStorage.setItem('ilearn_parent_profile', JSON.stringify(parentView));
+      localStorage.setItem('ilearn_parent_student', JSON.stringify(parentView.student || {}));
+      try {
+        const timetable = await API.getLatestTimetable();
+        localStorage.setItem('ilearn_student_timetable', JSON.stringify(timetable));
+      } catch (innerErr) {
+        console.warn('Timetable refresh skipped:', innerErr.message || innerErr);
+      }
+    } else if (role === 'parent') {
+      await refreshParentDashboard();
+      return;
+    } else if (role === 'teacher') {
+      const teacher = JSON.parse(localStorage.getItem('ilearn_teacher') || '{}');
+      localStorage.setItem('ilearn_teacher', JSON.stringify(teacher));
+    }
+  } catch (err) {
+    if (role === 'student') {
+      const message = err.message || 'Could not load student profile.';
+      setElementText('studentAttendanceHint', message);
+      setElementText('parentFeeStatus', message.includes('blocked by the teacher') ? 'Blocked by teacher' : 'Update unavailable');
+      const studentStored = getStoredProfileState('ilearn_student');
+      if (studentStored?.class) {
+        setElementText('parentFeeBatch', `Class ${studentStored.class}`);
+      }
+      if (message.includes('blocked by the teacher') || message.includes('Session expired')) {
+        localStorage.removeItem('ilearn_student_profile');
+      }
+    }
+    console.warn('Profile refresh skipped:', err.message || err);
   }
-
-  setHtml('teacherAttendanceBody', teacherStudents.map((student) => `
-    <tr>
-      <td style="padding:14px 12px;">
-        <div style="font-weight:700;">${student.name}</div>
-        <div style="font-size:0.82rem;color:var(--muted);">${student.email}</div>
-      </td>
-      <td style="padding:14px 12px;">Class ${student.class}</td>
-      <td style="padding:14px 12px;">${student.mobile || '-'}</td>
-      <td style="padding:14px 12px;">${student.attendance?.percentage || 0}% (${student.attendance?.present || 0}/${student.attendance?.total || 0})</td>
-      <td style="padding:14px 12px;">
-        <label style="margin-right:14px;"><input type="radio" name="attendance-${student.id}" value="present" ${(student.currentStatus || 'present') === 'present' ? 'checked' : ''}> Present</label>
-        <label><input type="radio" name="attendance-${student.id}" value="absent" ${student.currentStatus === 'absent' ? 'checked' : ''}> Absent</label>
-      </td>
-      <td style="padding:14px 12px;">Live DB</td>
-    </tr>
-  `).join(''));
+  updateDashboardAttendanceCards();
+  renderTodayTimetableReminder();
 }
 
-function renderTeacherWeeklyTestTable() {
-  if (!teacherStudents.length) {
-    setHtml('teacherWeeklyTestBody', '<tr><td colspan="5" style="padding:18px;color:var(--muted);">No students available.</td></tr>');
+// ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
+function setElementText(id, value) {
+  const node = document.getElementById(id);
+  if (node) node.textContent = value;
+}
+function setElementWidth(id, value) {
+  const node = document.getElementById(id);
+  if (node) node.style.width = value;
+}
+function formatUpdatedLabel(dateObj) {
+  const date = dateObj || new Date();
+  return 'Last updated: ' + date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function setUpdatedLabel(id, dateObj) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.textContent = formatUpdatedLabel(dateObj);
+}
+function getTodayTimetableDayKey() {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
+}
+function getTimetableSlotClass(type) {
+  const value = String(type || '').toLowerCase();
+  if (value === 'study') return 'var(--pink)';
+  if (value === 'practice') return 'var(--blue)';
+  if (value === 'revision') return 'var(--green)';
+  if (value === 'doubt') return 'var(--purple)';
+  if (value === 'test') return '#FFD166';
+  return 'var(--blue)';
+}
+function renderTodayTimetableReminder() {
+  const wrap = document.getElementById('studentTodayTimetable');
+  if (!wrap) return;
+  const timetableState = getStoredProfileState('ilearn_student_timetable');
+  const schedule = timetableState.timetable?.schedule || timetableState.schedule || {};
+  const weeklyPlan = schedule.weeklyPlan || schedule.week || {};
+  const todayKey = getTodayTimetableDayKey();
+  const todaySlots = Array.isArray(weeklyPlan[todayKey]) ? weeklyPlan[todayKey] : [];
+  if (!todaySlots.length) {
+    wrap.innerHTML = '<div class="tt-slot"><div class="tt-dot" style="background:var(--blue)"></div><div class="tt-time">' + todayKey + '</div><div>No timetable slots planned for today yet.</div></div>';
     return;
   }
-
-  setHtml('teacherWeeklyTestBody', teacherStudents.map((student) => `
-    <tr>
-      <td style="padding:14px 12px;">${student.name}</td>
-      <td style="padding:14px 12px;">Class ${student.class}</td>
-      <td style="padding:14px 12px;"><input type="number" min="0" id="weeklyMarks-${student.id}" placeholder="Marks" style="width:100%;background:var(--dark3);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;color:var(--text);"></td>
-      <td style="padding:14px 12px;"><input type="text" id="weeklyNotes-${student.id}" placeholder="Optional note" style="width:100%;background:var(--dark3);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;color:var(--text);"></td>
-      <td style="padding:14px 12px;">${student.latestWeeklyTest ? `${student.latestWeeklyTest.title} - ${student.latestWeeklyTest.marks_obtained}/${student.latestWeeklyTest.total_marks}` : 'No entry yet'}</td>
-    </tr>
-  `).join(''));
+  wrap.innerHTML = todaySlots.slice(0, 4).map((slot) => {
+    const time = slot.time || 'Study Slot';
+    const topic = slot.topic || 'Maths Practice';
+    const type = slot.type ? ' - ' + slot.type.charAt(0).toUpperCase() + slot.type.slice(1) : '';
+    return '<div class="tt-slot"><div class="tt-dot" style="background:' + getTimetableSlotClass(slot.type) + '"></div><div class="tt-time">' + time + '</div><div>' + topic + type + '</div></div>';
+  }).join('');
 }
 
-function renderTeacherFeeTable() {
-  if (!teacherStudents.length) {
-    setHtml('teacherFeeBody', '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students available.</td></tr>');
-    return;
+function updateDashboardAttendanceCards() {
+  const now  = new Date();
+  const role = getCurrentRole();
+ 
+  // ── Read cached data ──
+  const studentProfile = getStoredProfileState('ilearn_student_profile');
+  const studentStored  = getStoredProfileState('ilearn_student');
+  // Parent profile is the raw API response stored by refreshParentDashboard
+  const parentApiResponse = getStoredProfileState('ilearn_parent_profile');
+  const parentStored      = getStoredProfileState('ilearn_parent_student');
+  const teacherStored     = getStoredProfileState('ilearn_teacher');
+ 
+  // ── Welcome banner ──
+  const welcomeName = role === 'student'
+    ? (studentProfile.student?.name || studentStored.name || 'Student')
+    : role === 'parent'
+      ? (parentApiResponse.student?.name || parentStored.name || 'Parent')
+      : role === 'teacher'
+        ? (teacherStored.name || 'Teacher')
+        : 'Learner';
+ 
+  setElementText('dashboardWelcomeName',    welcomeName || 'Learner');
+  setElementText('dashboardWelcomeRole',    role ? `Signed in as ${role}` : 'Sign in to view your dashboard');
+  setUpdatedLabel('dashboardWelcomeUpdated', now);
+ 
+  // ── Student attendance card ──
+  const studentMonth   = studentProfile.attendanceSummary?.month   || null;
+  const studentOverall = studentProfile.attendanceSummary?.overall || null;
+  if (studentMonth || studentOverall) {
+    setElementText('studentAttendanceMonth',         `${studentMonth?.present || 0} / ${studentMonth?.total || 0} days`);
+    setElementText('studentAttendanceOverall',       `${studentOverall?.percentage || 0}%`);
+    setElementText('studentAttendanceProgressLabel', `${studentOverall?.percentage || 0}%`);
+    setElementWidth('studentAttendanceProgress',     `${Math.max(0, Math.min(100, Number(studentOverall?.percentage || 0)))}%`);
+    setElementText('studentAttendanceHint', studentOverall?.total
+      ? `Overall attendance: ${studentOverall.present}/${studentOverall.total} classes marked.`
+      : 'Attendance will appear here once your teacher starts marking it.');
+  }
+  setUpdatedLabel('studentAttendanceUpdated', now);
+ 
+  // ── Student MCQ streak ──
+  const streakValue = Number(studentProfile.mcqStreak || 0);
+  setElementText('studentStreakValue', streakValue + ' day' + (streakValue === 1 ? '' : 's'));
+  setUpdatedLabel('studentStreakUpdated', now);
+ 
+  // ── Parent attendance + fee cards ──
+  // Normalise: the API response has attendance at report.attendanceSummary
+  // AND at the flat top-level — handle both.
+  const derivedParentState = role === 'student' ? deriveParentReportFromStudentState() : {};
+  const effectiveParentApiResponse = Object.keys(parentApiResponse || {}).length ? parentApiResponse : derivedParentState;
+  const parentReport  = effectiveParentApiResponse.report || effectiveParentApiResponse;
+  const parentStudent = effectiveParentApiResponse.student || parentStored || studentProfile.student || studentStored;
+ 
+  const parentMonth   = parentReport?.attendanceSummary?.month  || parentReport?.attendance || null;
+  const parentOverall = parentReport?.attendanceSummary?.overall || parentMonth;
+ 
+  if (parentMonth || parentStudent?.name) {
+    setElementText('parentAttendanceMonth',          `${parentMonth?.present || 0} / ${parentMonth?.total || 0} days`);
+    setElementText('parentAttendanceOverall',        `${parentOverall?.percentage || 0}%`);
+    setElementText('parentAttendanceStudent',        parentStudent?.name || 'Linked student');
+    setElementText('parentAttendanceProgressLabel',  `${parentOverall?.percentage || 0}%`);
+    setElementWidth('parentAttendanceProgress',      `${Math.max(0, Math.min(100, Number(parentOverall?.percentage || 0)))}%`);
+    setUpdatedLabel('parentAttendanceUpdated', now);
+  }
+ 
+  const feeSummary = parentReport?.feeSummary || studentProfile.feeSummary || null;
+  const feeStudent = parentStudent?.class ? parentStudent : (studentProfile.student || studentStored || {});
+  if (feeSummary || feeStudent?.class) {
+    setElementText('parentFeeBatch',   feeStudent?.class ? `Class ${feeStudent.class}` : 'Class --');
+    const pendingAmt = Number(feeSummary?.pending || 0);
+    setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
+    setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
+    setElementText('parentFeePending', `Rs ${feeSummary?.pending   || 0}`);
+    setUpdatedLabel('parentFeeUpdated', now);
+  }
+ 
+  // ── Re-inject ALL parent tab widgets from cache (so tab-switch stays live) ──
+  if ((role === 'parent' || role === 'student') && Object.keys(effectiveParentApiResponse || {}).length) {
+    if (typeof injectParentTabData === 'function') {
+      injectParentTabData(parentReport, parentStudent);
+    }
+  }
+ 
+  renderTodayTimetableReminder();
+}
+// ── FIX: updateHomeForSession — force teacher tab with inline styles, no CSS class race ──
+function updateHomeForSession() {
+  const role = getCurrentRole();
+
+  // Show/hide role-specific sections using inline styles (overrides CSS class hiding)
+  document.querySelectorAll('.role-student-only').forEach((el) => {
+    el.style.display = (!role || role === 'student') ? '' : 'none';
+  });
+  document.querySelectorAll('.role-parent-only').forEach((el) => {
+    el.style.display = role === 'parent' ? '' : 'none';
+  });
+  // IMPORTANT: for teacher role, force ALL role-teacher-only elements visible
+  document.querySelectorAll('.role-teacher-only').forEach((el) => {
+    el.style.display = role === 'teacher' ? '' : 'none';
+    if (role === 'teacher') {
+      el.style.visibility = 'visible';
+      el.style.opacity = '1';
+    }
+  });
+
+  // Hide assessment and AI features sections for teacher
+  [document.getElementById('assessment'), document.getElementById('ai-features')].forEach((section) => {
+    if (section) section.style.display = role === 'teacher' ? 'none' : '';
+  });
+
+  // Get tab and content elements
+  const studentTab     = document.getElementById('studentDashTab');
+  const teacherTab     = document.getElementById('teacherDashTab');
+  const studentContent = document.getElementById('tab-student');
+  const teacherContent = document.getElementById('tab-teacher');
+
+  // Reset all tabs and contents
+  [studentTab, teacherTab].forEach(t => {
+    if (t) { t.classList.remove('active'); t.style.display = 'none'; }
+  });
+  [studentContent, teacherContent].forEach(c => {
+    if (c) { c.classList.remove('active'); c.style.display = 'none'; }
+  });
+
+  if (role === 'teacher') {
+    // Force teacher tab visible — override ALL CSS that might hide it
+    if (teacherTab) {
+      teacherTab.style.cssText = 'display:inline-block !important; visibility:visible !important; opacity:1 !important;';
+      teacherTab.classList.add('active');
+    }
+    // Show teacher content
+    if (teacherContent) {
+      teacherContent.classList.add('active');
+      teacherContent.style.cssText = 'display:grid !important; visibility:visible !important; opacity:1 !important;';
+    }
+  } else if (role === 'student') {
+    if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
+    if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
+  } else {
+    // No role — show all tabs, student active by default
+    [studentTab, teacherTab].forEach(t => { if (t) t.style.display = 'inline-block'; });
+    if (studentTab) studentTab.classList.add('active');
+    if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
   }
 
-  setHtml('teacherFeeBody', teacherStudents.map((student) => `
-    <tr>
-      <td style="padding:14px 12px;">${student.name}</td>
-      <td style="padding:14px 12px;">Class ${student.class}</td>
-      <td style="padding:14px 12px;">Rs ${student.feeSummary?.totalDue || 0}</td>
-      <td style="padding:14px 12px;">Rs ${student.feeSummary?.totalPaid || 0}</td>
-      <td style="padding:14px 12px;">Rs ${student.feeSummary?.pending || 0}</td>
-      <td style="padding:14px 12px;"><input type="number" min="0" id="feeAmount-${student.id}" placeholder="Amount paid" style="width:100%;background:var(--dark3);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;color:var(--text);"></td>
+  renderNavProfile();
+  updateAuthRequiredState();
+  updateDashboardAttendanceCards();
+}
+
+// ── TEACHER FUNCTIONS ─────────────────────────────────────────────────────────
+function setDefaultTeacherDate() {
+  const input = document.getElementById('teacherAttendanceDate');
+  if (!input || input.value) return;
+  const today = new Date();
+  const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+  input.value = localDate;
+}
+
+let teacherStudentCache = [];
+
+function renderTeacherMcqCards(count = 10) {
+  const wrap = document.getElementById('teacherMcqCards');
+  if (!wrap) return;
+  const safeCount = Math.max(1, Math.min(20, Number(count) || 10));
+  const countInput = document.getElementById('teacherMcqCount');
+  if (countInput) countInput.value = safeCount;
+  wrap.innerHTML = Array.from({ length: safeCount }, (_, index) => `
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:18px;padding:16px;">
+      <div style="font-size:0.78rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Question ${index + 1}</div>
+      <div class="form-group" style="margin:0 0 10px 0;"><label>Question Text</label><textarea id="teacherMcqQuestion${index + 1}" rows="3" placeholder="Enter question ${index + 1}"></textarea></div>
+      <div class="form-group" style="margin:0 0 10px 0;"><label>Question Image URL / Path</label><input type="text" id="teacherMcqQuestionImage${index + 1}" placeholder="Paste image URL or path (optional)" /></div>
+      ${[1, 2, 3, 4].map((optionNumber) => `
+        <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px;">
+          <div class="form-group" style="margin:0;"><label>Option ${optionNumber} Text</label><input type="text" id="teacherMcq${index + 1}Option${optionNumber}" placeholder="Option ${optionNumber} text" /></div>
+          <div class="form-group" style="margin:0;"><label>Option ${optionNumber} Image URL / Path</label><input type="text" id="teacherMcq${index + 1}Option${optionNumber}Image" placeholder="Paste option ${optionNumber} image URL or path (optional)" /></div>
+        </div>
+      `).join('')}
+      <div class="form-group" style="margin:0;"><label>Correct Option</label>
+        <select id="teacherMcq${index + 1}Correct"><option value="0">Option 1</option><option value="1">Option 2</option><option value="2">Option 3</option><option value="3">Option 4</option></select>
+      </div>
+    </div>
+  `).join('');
+}
+
+function regenerateTeacherMcqCards() {
+  const count = document.getElementById('teacherMcqCount')?.value || 10;
+  renderTeacherMcqCards(count);
+}
+
+function showTeacherMcqMessage(message, isError) {
+  const box = document.getElementById('teacherMcqMessage');
+  if (!box) return;
+  box.style.display = 'block';
+  box.style.background = isError ? 'rgba(255,45,120,0.12)' : 'rgba(0,229,160,0.12)';
+  box.style.borderColor = isError ? 'rgba(255,45,120,0.25)' : 'rgba(0,229,160,0.25)';
+  box.textContent = message;
+}
+
+function showTeacherPanelMessage(id, message, isError) {
+  const box = document.getElementById(id);
+  if (!box) return;
+  box.style.display = 'block';
+  box.style.background = isError ? 'rgba(255,45,120,0.12)' : 'rgba(77,158,255,0.12)';
+  box.style.borderColor = isError ? 'rgba(255,45,120,0.25)' : 'rgba(77,158,255,0.25)';
+  box.textContent = message;
+}
+
+function renderTeacherMcqList(mcqs) {
+  const body = document.getElementById('teacherMcqList');
+  if (!body) return;
+  if (!mcqs.length) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No daily MCQ batches posted yet.</div>';
+    return;
+  }
+  body.innerHTML = mcqs.map((mcq, index) => {
+    const total = Number(mcq.submission_count || 0);
+    const correct = Number(mcq.correct_count || 0);
+    const accuracy = total ? Math.round((correct / total) * 100) : 0;
+    const studentReports = Array.isArray(mcq.student_reports) ? mcq.student_reports : [];
+    const attempted = studentReports.filter((s) => s.attemptedCount > 0);
+    const notAttempted = studentReports.filter((s) => s.attemptedCount === 0);
+    const attemptedHtml = attempted.length
+      ? attempted.map((s) => `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid rgba(255,255,255,0.06);"><div><div style="font-weight:700;">${s.name}</div><div style="font-size:0.8rem;color:var(--muted);">Class ${s.class} - ${s.email || 'No email'}</div></div><div style="text-align:right;"><div style="font-weight:700;color:var(--green);">${s.score}</div><div style="font-size:0.8rem;color:var(--muted);">Attempted ${s.attemptedCount}, Wrong ${s.wrongCount}</div></div></div>`).join('')
+      : '<div style="color:var(--muted);font-size:0.84rem;">No students have attempted this batch yet.</div>';
+    const notAttemptedHtml = notAttempted.length
+      ? `<div style="margin-top:12px;color:var(--muted);font-size:0.82rem;line-height:1.7;"><strong style="color:var(--yellow);">Not attempted:</strong> ${notAttempted.map((s) => `${s.name} (Class ${s.class})`).join(', ')}</div>`
+      : '<div style="margin-top:12px;color:var(--green);font-size:0.82rem;">All assigned students have attempted this batch.</div>';
+    return `
+      <div style="padding:${index ? '16px 0 0' : '0'};margin-top:${index ? '16px' : '0'};border-top:${index ? '1px solid rgba(255,255,255,0.06)' : 'none'};">
+        <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}</div>
+            <div style="font-weight:700;line-height:1.5;">${mcq.question_count || 0} questions - ends ${mcq.available_until || 'in 24 hours'}</div>
+          </div>
+          <div style="min-width:220px;text-align:right;">
+            <div style="font-weight:700;color:var(--green);">${accuracy}% accuracy</div>
+            <div style="color:var(--muted);font-size:0.82rem;margin-top:4px;">Attempted: ${mcq.attempted_students || 0} | Not attempted: ${mcq.not_attempted_students || 0}</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:16px;border-radius:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);">
+          <div style="font-size:0.76rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Student Scores</div>
+          ${attemptedHtml}${notAttemptedHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadTeacherMcqs() {
+  if (!hasActiveTeacherSession()) return;
+  try {
+    const data = await API.getTeacherMcqs();
+    renderTeacherMcqList(data.mcqs || []);
+  } catch (err) {
+    showTeacherMcqMessage(err.message || 'Could not load daily MCQs.', true);
+  }
+}
+
+async function createTeacherMcq() {
+  if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
+  const title = (document.getElementById('teacherMcqTitle')?.value || '').trim() || 'Daily MCQ Batch';
+  const classScope = (document.getElementById('teacherMcqClass')?.value || 'all').trim();
+  const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 10)));
+  const questions = Array.from({ length: questionCount }, (_, index) => {
+    const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
+    const imageUrl = (document.getElementById(`teacherMcqQuestionImage${index + 1}`)?.value || '').trim();
+    const options = [1, 2, 3, 4].map((optionIndex) => (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}`)?.value || '').trim());
+    const correctIndex = Number(document.getElementById(`teacherMcq${index + 1}Correct`)?.value || 0);
+    return { question, imageUrl, options, correctIndex };
+  }).filter((item) => item.question || item.imageUrl || item.options.some((option) => option));
+  if (!questions.length) { showTeacherMcqMessage('Add at least one MCQ card before posting.', true); return; }
+  if (questions.some((item) => (!item.question && !item.imageUrl) || item.options.some((option) => !option))) {
+    showTeacherMcqMessage('Each filled MCQ card must have question text or image, plus 4 options.', true); return;
+  }
+  try {
+    await API.createTeacherMcq({ title, classScope, questions });
+    const titleNode = document.getElementById('teacherMcqTitle');
+    if (titleNode) titleNode.value = '';
+    showTeacherMcqMessage(questions.length + ' question(s) posted successfully.', false);
+    renderTeacherMcqCards(questionCount);
+    await loadTeacherMcqs();
+  } catch (err) {
+    showTeacherMcqMessage(err.message || 'Could not post MCQ batch.', true);
+  }
+}
+
+function renderTeacherPaperList(papers) {
+  const wrap = document.getElementById('teacherPaperList');
+  if (!wrap) return;
+  if (!papers.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No question papers posted yet.</div>'; return; }
+  wrap.innerHTML = papers.map((paper, index) => `
+    <div style="padding:${index ? '16px 0 0' : '0'};margin-top:${index ? '16px' : '0'};border-top:${index ? '1px solid rgba(255,255,255,0.06)' : 'none'};display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;">${paper.title}</div>
+        <div style="color:var(--muted);font-size:0.84rem;margin-top:4px;">Class ${paper.class_scope || 'all'} - ${paper.resource_type || 'document'} - ${paper.posted_at || ''}</div>
+      </div>
+      <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="color:var(--blue);font-weight:700;">Open ↗</a>
+    </div>
+  `).join('');
+}
+
+async function loadTeacherQuestionPapers() {
+  if (!hasActiveTeacherSession()) return;
+  try {
+    const data = await API.getTeacherQuestionPapers();
+    renderTeacherPaperList(data.papers || []);
+  } catch (err) {
+    showTeacherPanelMessage('teacherPaperMessage', err.message || 'Could not load question papers.', true);
+  }
+}
+
+async function createTeacherQuestionPaper() {
+  const title = (document.getElementById('teacherPaperTitle')?.value || '').trim();
+  const classScope = (document.getElementById('teacherPaperClass')?.value || 'all').trim();
+  const resourceType = (document.getElementById('teacherPaperType')?.value || 'pdf').trim();
+  const resourceUrl = (document.getElementById('teacherPaperUrl')?.value || '').trim();
+  if (!title || !resourceUrl) { showTeacherPanelMessage('teacherPaperMessage', 'Please enter a title and the document URL/path.', true); return; }
+  try {
+    await API.createTeacherQuestionPaper({ title, classScope, resourceType, resourceUrl });
+    ['teacherPaperTitle', 'teacherPaperUrl'].forEach((id) => { const node = document.getElementById(id); if (node) node.value = ''; });
+    showTeacherPanelMessage('teacherPaperMessage', 'Question paper added successfully.', false);
+    await loadTeacherQuestionPapers();
+  } catch (err) {
+    showTeacherPanelMessage('teacherPaperMessage', err.message || 'Could not add question paper.', true);
+  }
+}
+
+function renderTeacherWeeklyTestTable(students) {
+  const body = document.getElementById('teacherWeeklyTestBody');
+  if (!body) return;
+  if (!students.length) { body.innerHTML = '<tr><td colspan="5" style="padding:18px;color:var(--muted);">No students available.</td></tr>'; return; }
+  body.innerHTML = students.map((student) => `
+    <tr data-student-id="${student.id}">
+      <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.name}</td>
+      <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Class ${student.class}</td>
+      <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);"><input type="number" min="0" id="weekly-marks-${student.id}" placeholder="Marks" style="width:120px;" /></td>
+      <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);"><input type="text" id="weekly-note-${student.id}" placeholder="Optional note" style="width:100%;" /></td>
+      <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.latestWeeklyTest ? `${student.latestWeeklyTest.title} - ${student.latestWeeklyTest.marks_obtained}/${student.latestWeeklyTest.total_marks}` : 'No entry yet'}</td>
     </tr>
-  `).join(''));
+  `).join('');
+}
+
+async function saveTeacherWeeklyTests() {
+  const title = (document.getElementById('teacherWeeklyTestTitle')?.value || '').trim();
+  const testDate = document.getElementById('teacherWeeklyTestDate')?.value || '';
+  const totalMarks = Number(document.getElementById('teacherWeeklyTestTotal')?.value || 100);
+  if (!title || !testDate) { showTeacherPanelMessage('teacherWeeklyTestMessage', 'Please enter the weekly test title and date.', true); return; }
+  const entries = teacherStudentCache.map((student) => ({
+    studentId: student.id,
+    marksObtained: document.getElementById('weekly-marks-' + student.id)?.value || '',
+    notes: document.getElementById('weekly-note-' + student.id)?.value || ''
+  }));
+  try {
+    const result = await API.saveTeacherWeeklyTests({ title, testDate, totalMarks, entries });
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherPanelMessage('teacherWeeklyTestMessage', 'Weekly test marks saved successfully.', false);
+    await loadTeacherAttendance();
+  } catch (err) {
+    showTeacherPanelMessage('teacherWeeklyTestMessage', err.message || 'Could not save weekly test marks.', true);
+  }
+}
+
+function renderTeacherFeeTable(students) {
+  const body = document.getElementById('teacherFeeBody');
+  if (!body) return;
+  if (!students.length) { body.innerHTML = '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students available.</td></tr>'; return; }
+  body.innerHTML = students.map((student) => {
+    const fee = student.feeSummary || {};
+    return `
+      <tr data-student-id="${student.id}">
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.name}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Class ${student.class}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Rs ${fee.totalDue || 0}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Rs ${fee.totalPaid || 0}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);color:${Number(fee.pending || 0) > 0 ? 'var(--pink)' : 'var(--green)'};">Rs ${fee.pending || 0}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);"><input type="number" min="0" id="fee-paid-${student.id}" placeholder="Amount paid" style="width:140px;" /></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function saveTeacherFees() {
+  const paidOn = document.getElementById('teacherFeeDate')?.value || '';
+  if (!paidOn) { showTeacherPanelMessage('teacherFeeMessage', 'Please choose the payment date.', true); return; }
+  const entries = teacherStudentCache.map((student) => ({
+    studentId: student.id,
+    amountPaid: document.getElementById('fee-paid-' + student.id)?.value || 0
+  }));
+  try {
+    const result = await API.saveTeacherFees({ paidOn, entries });
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherPanelMessage('teacherFeeMessage', 'Fee payments saved successfully.', false);
+    await loadTeacherAttendance();
+  } catch (err) {
+    showTeacherPanelMessage('teacherFeeMessage', err.message || 'Could not save fee payments.', true);
+  }
+}
+
+function renderTeacherAttendanceTable(students) {
+  const body = document.getElementById('teacherAttendanceBody');
+  if (!body) return;
+  if (!students.length) { body.innerHTML = '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students registered yet.</td></tr>'; return; }
+  body.innerHTML = students.map((student) => {
+    const attendance = student.attendance || {};
+    const percentage = Number(attendance.percentage || 0);
+    const currentStatus = student.currentStatus === 'absent' ? 'absent' : 'present';
+    const approvalStatus = student.approvalStatus === 'rejected' ? 'rejected' : 'accepted';
+    return `
+      <tr data-student-id="${student.id}">
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="font-weight:700;">${student.name}</div>
+          <div style="color:var(--muted);font-size:0.85rem;">${student.email || ''}</div>
+        </td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Class ${student.class}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.mobile || 'Not available'}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${percentage}% <span style="color:var(--muted);">(${attendance.present || 0}/${attendance.total || 0})</span></td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <label style="margin-right:12px;cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}> Present</label>
+          <label style="cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}> Absent</label>
+        </td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <select id="approval-${student.id}" style="min-width:140px;">
+            <option value="accepted" ${approvalStatus === 'accepted' ? 'selected' : ''}>Accept</option>
+            <option value="rejected" ${approvalStatus === 'rejected' ? 'selected' : ''}>Reject</option>
+          </select>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function showTeacherAttendanceMessage(message, isError) {
+  const box = document.getElementById('teacherAttendanceMessage');
+  if (!box) return;
+  box.style.display = 'block';
+  box.style.background = isError ? 'rgba(255,45,120,0.12)' : 'rgba(77,158,255,0.12)';
+  box.style.borderColor = isError ? 'rgba(255,45,120,0.25)' : 'rgba(77,158,255,0.25)';
+  box.textContent = message;
+}
+
+// ── DOUBTS ────────────────────────────────────────────────────────────────────
+async function loadStudentDoubts() {
+  if (!hasActiveStudentSession()) return;
+  const wrap = document.getElementById('studentDoubtList');
+  const popupStack = document.getElementById('doubtPopupStack');
+  if (!wrap) return;
+  try {
+    const data = await API.getStudentDoubts();
+    const doubts = data.doubts || [];
+    if (!doubts.length) {
+      wrap.innerHTML = '';
+      if (popupStack) popupStack.innerHTML = '';
+      return;
+    }
+    const answeredDoubts = doubts.filter((doubt) => doubt.status === 'answered' && (doubt.answer_text || doubt.answer_image));
+    wrap.innerHTML = doubts.map((doubt, index) => {
+      const status = doubt.status === 'answered' ? 'answered' : 'open';
+      const answer = (doubt.answer_text || doubt.answer_image) ? `
+        <div class="doubt-reply-block">
+          <div class="doubt-reply-tag">Reply ${index + 1}</div>
+          ${doubt.answer_text ? `<div class="doubt-reply-text">${doubt.answer_text}</div>` : ''}
+          ${doubt.answer_image ? `<div class="doubt-answer"><img src="${doubt.answer_image}" alt="Answer" /></div>` : ''}
+        </div>` : '';
+      return `
+        <div class="doubt-item">
+          <div class="doubt-question-title">Question ${index + 1}: ${doubt.question_text}</div>
+          ${doubt.question_image ? `<div class="doubt-answer"><img src="${doubt.question_image}" alt="Question" /></div>` : ''}
+          <div class="doubt-meta">
+            <span>Asked on ${doubt.created_at || 'Recently'}</span>
+            <span class="doubt-status ${status}">${status}</span>
+          </div>
+          ${answer}
+        </div>
+      `;
+    }).join('');
+    if (popupStack) {
+      popupStack.innerHTML = answeredDoubts.slice(0, 2).map((doubt, index) => `
+        <div class="doubt-popup show">
+          <div class="doubt-popup-label">${index + 1}</div>
+          <div class="doubt-popup-text">${doubt.answer_text || 'Teacher sent an answer image.'}</div>
+        </div>
+      `).join('');
+    }
+  } catch (err) {
+    wrap.innerHTML = '';
+    if (popupStack) popupStack.innerHTML = '';
+  }
+}
+
+async function loadTeacherDoubts() {
+  if (!hasActiveTeacherSession()) return;
+  const wrap = document.getElementById('teacherDoubtList');
+  if (!wrap) return;
+  try {
+    const data = await API.getTeacherDoubts();
+    const doubts = data.doubts || [];
+    if (!doubts.length) { wrap.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No student doubts submitted yet.</div>'; return; }
+    wrap.innerHTML = doubts.map((doubt) => {
+      const isAnswered = doubt.status === 'answered';
+      return `
+        <div class="doubt-item teacher-doubt-card">
+          <div class="teacher-doubt-head">
+            <div class="teacher-doubt-student">${doubt.student_name || 'Student'} - Class ${doubt.student_class || '?'}</div>
+            <span class="doubt-status ${isAnswered ? 'answered' : 'open'}">${isAnswered ? 'Answered' : 'Open'}</span>
+          </div>
+          <div class="doubt-question-title">${doubt.question_text}</div>
+          ${doubt.question_image ? `<div class="doubt-answer"><img src="${doubt.question_image}" alt="Question image" /></div>` : ''}
+          ${isAnswered ? `
+            <div class="doubt-reply-block">
+              <div class="doubt-reply-tag">Your Reply</div>
+              ${doubt.answer_text ? `<div class="doubt-reply-text">${doubt.answer_text}</div>` : ''}
+              ${doubt.answer_image ? `<div class="doubt-answer"><img src="${doubt.answer_image}" alt="Answer image" /></div>` : ''}
+            </div>
+          ` : `
+            <div class="doubt-input" style="margin-top:12px;">
+              <textarea id="doubt-answer-${doubt.id}" rows="3" placeholder="Type your reply here..."></textarea>
+              <input type="text" id="doubt-answer-img-${doubt.id}" placeholder="Image URL (optional)" />
+              <button class="btn-secondary" onclick="answerTeacherDoubt(${doubt.id})">Send Reply</button>
+            </div>
+          `}
+          <div class="doubt-meta"><span>${doubt.created_at || ''}</span></div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:0.9rem;">${err.message || 'Could not load doubts.'}</div>`;
+  }
+}
+
+async function answerTeacherDoubt(id) {
+  const text = (document.getElementById('doubt-answer-' + id)?.value || '').trim();
+  const image = (document.getElementById('doubt-answer-img-' + id)?.value || '').trim();
+  if (!text) { alert('Please enter a reply.'); return; }
+  try {
+    await API.answerTeacherDoubt(id, text, image || null);
+    await loadTeacherDoubts();
+    await loadStudentDoubts();
+  } catch (err) {
+    alert(err.message || 'Could not send reply.');
+  }
 }
 
 async function loadTeacherAttendance() {
-  await loadTeacherDashboard();
-}
-
-async function loadTeacherDashboard() {
-  updateRoleVisibility('teacher');
-  switchTab('teacher', $('teacherDashTab'));
-  document.getElementById('dashboards')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const attendanceDate = $('teacherAttendanceDate');
-  const weeklyDate = $('teacherWeeklyTestDate');
-  const feeDate = $('teacherFeeDate');
-  if (attendanceDate && !attendanceDate.value) attendanceDate.value = todayIsoDate();
-  if (weeklyDate && !weeklyDate.value) weeklyDate.value = todayIsoDate();
-  if (feeDate && !feeDate.value) feeDate.value = todayIsoDate();
-
+  if (!hasActiveTeacherSession()) return;
+  setDefaultTeacherDate();
+  const attendanceDate = document.getElementById('teacherAttendanceDate')?.value || '';
+  const weeklyDate = document.getElementById('teacherWeeklyTestDate');
+  const feeDate = document.getElementById('teacherFeeDate');
+  if (weeklyDate && !weeklyDate.value) weeklyDate.value = attendanceDate;
+  if (feeDate && !feeDate.value) feeDate.value = attendanceDate;
   try {
-    const data = await API.getTeacherStudents(attendanceDate?.value || '');
-    teacherStudents = Array.isArray(data.students) ? data.students : [];
-    setText('dashboardWelcomeName', data.teacher?.name || 'Teacher');
-    setText('dashboardWelcomeRole', 'Signed in as teacher');
-    setText('dashboardWelcomeUpdated', `Last updated: ${formatUpdated()}`);
-    renderTeacherAttendanceTable();
-    renderTeacherWeeklyTestTable();
-    renderTeacherFeeTable();
-    buildProfilePanel(data.teacher);
-    showMessage('teacherAttendanceMessage', '');
-    showMessage('teacherWeeklyTestMessage', '');
-    showMessage('teacherFeeMessage', '');
-  } catch (error) {
-    setText('dashboardWelcomeName', 'Teacher');
-    setText('dashboardWelcomeRole', 'Could not load teacher dashboard');
-    setText('dashboardWelcomeUpdated', `Last updated: ${formatUpdated()}`);
-    showMessage('teacherAttendanceMessage', error.message || 'Could not load teacher dashboard.');
+    const data = await API.getTeacherStudents(attendanceDate);
+    teacherStudentCache = data.students || [];
+    renderTeacherAttendanceTable(teacherStudentCache);
+    renderTeacherWeeklyTestTable(teacherStudentCache);
+    renderTeacherFeeTable(teacherStudentCache);
+    renderNavProfile();
+    await loadTeacherQuestionPapers();
+  } catch (err) {
+    showTeacherAttendanceMessage(err.message || 'Could not load attendance.', true);
   }
 }
 
 async function saveTeacherAttendance() {
-  const date = $('teacherAttendanceDate')?.value || '';
-  if (!date) {
-    showMessage('teacherAttendanceMessage', 'Please choose an attendance date.');
-    return;
-  }
-
-  const attendance = teacherStudents.map((student) => ({
-    studentId: student.id,
-    status: document.querySelector(`input[name="attendance-${student.id}"]:checked`)?.value || 'present'
-  }));
-
+  if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
+  const date = document.getElementById('teacherAttendanceDate')?.value;
+  if (!date) { showTeacherAttendanceMessage('Please choose an attendance date.', true); return; }
+  const rows = Array.from(document.querySelectorAll('#teacherAttendanceBody tr[data-student-id]')).map((row) => {
+    const studentId = Number(row.dataset.studentId || 0);
+    const selected = row.querySelector('input[type="radio"]:checked');
+    const approval = row.querySelector('select');
+    return studentId ? { studentId, status: selected ? selected.value : 'present', approvalStatus: approval ? approval.value : 'accepted' } : null;
+  }).filter(Boolean);
   try {
-    const data = await API.saveTeacherAttendance({ date, attendance });
-    teacherStudents = Array.isArray(data.students) ? data.students : teacherStudents;
-    renderTeacherAttendanceTable();
-    renderTeacherWeeklyTestTable();
-    renderTeacherFeeTable();
-    showMessage('teacherAttendanceMessage', `Attendance saved successfully for ${date}.`, 'success');
-  } catch (error) {
-    showMessage('teacherAttendanceMessage', error.message || 'Could not save attendance.');
+    const result = await API.saveTeacherAttendance(date, rows);
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherAttendanceMessage('Attendance saved successfully for ' + date + '.', false);
+    await refreshRoleData();
+    await loadTeacherAttendance();
+  } catch (err) {
+    showTeacherAttendanceMessage(err.message || 'Could not save attendance.', true);
   }
 }
 
-async function saveTeacherWeeklyTests() {
-  const title = $('teacherWeeklyTestTitle')?.value.trim() || '';
-  const testDate = $('teacherWeeklyTestDate')?.value || '';
-  const totalMarks = Number($('teacherWeeklyTestTotal')?.value || 100);
-
-  if (!title || !testDate) {
-    showMessage('teacherWeeklyTestMessage', 'Please enter the weekly test title and date.');
-    return;
-  }
-
-  const entries = teacherStudents.map((student) => ({
-    studentId: student.id,
-    marksObtained: $(`weeklyMarks-${student.id}`)?.value || '',
-    notes: $(`weeklyNotes-${student.id}`)?.value || ''
-  }));
-
+// ── MCQ & PAPERS — STUDENT ────────────────────────────────────────────────────
+async function submitDailyMcqAnswer(mcqId, optionIndex) {
   try {
-    const data = await API.saveTeacherWeeklyTests({ title, testDate, totalMarks, entries });
-    teacherStudents = Array.isArray(data.students) ? data.students : teacherStudents;
-    renderTeacherAttendanceTable();
-    renderTeacherWeeklyTestTable();
-    renderTeacherFeeTable();
-    showMessage('teacherWeeklyTestMessage', `Weekly test marks saved for ${title}.`, 'success');
-  } catch (error) {
-    showMessage('teacherWeeklyTestMessage', error.message || 'Could not save weekly tests.');
+    const result = await API.submitStudentDailyMcq(mcqId, optionIndex);
+    alert(result.isCorrect ? 'Correct answer! ✓' : 'Answer saved.');
+  } catch (err) {
+    alert(err.message || 'Could not submit MCQ answer.');
   }
 }
 
-async function saveTeacherFees() {
-  const paidOn = $('teacherFeeDate')?.value || '';
-  if (!paidOn) {
-    showMessage('teacherFeeMessage', 'Please choose a fee payment date.');
-    return;
-  }
-
-  const entries = teacherStudents.map((student) => ({
-    studentId: student.id,
-    amountPaid: $(`feeAmount-${student.id}`)?.value || 0
-  }));
-
+async function renderQuestionPapers(role) {
+  const list = document.getElementById('studentPaperList');
+  if (!list) return;
   try {
-    const data = await API.saveTeacherFees({ paidOn, entries });
-    teacherStudents = Array.isArray(data.students) ? data.students : teacherStudents;
-    renderTeacherAttendanceTable();
-    renderTeacherWeeklyTestTable();
-    renderTeacherFeeTable();
-    showMessage('teacherFeeMessage', `Fee entries saved for ${paidOn}.`, 'success');
-  } catch (error) {
-    showMessage('teacherFeeMessage', error.message || 'Could not save fees.');
+    const data = role === 'parent' ? await API.getParentQuestionPapers() : await API.getStudentQuestionPapers();
+    const papers = data.papers || [];
+    if (!papers.length) { list.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No question papers posted yet.</div>'; return; }
+    list.innerHTML = papers.map((paper) => `
+      <div style="padding:14px;border:1px solid rgba(255,255,255,0.08);border-radius:14px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;gap:12px;align-items:center;">
+        <div>
+          <div style="font-weight:700;">${paper.title}</div>
+          <div style="color:var(--muted);font-size:0.82rem;margin-top:4px;">Class ${paper.class_scope || 'all'} - ${paper.resource_type || 'document'} - ${paper.posted_at || ''}</div>
+        </div>
+        <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="color:var(--blue);font-weight:700;">Open ↗</a>
+      </div>`
+    ).join('');
+  } catch (err) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">Unable to load question papers.</div>';
   }
 }
 
-function logoutCurrentUser() {
-  closeProfileMenu();
-  if (currentRole() === 'teacher') {
-    API.logoutTeacher();
-    return;
+async function loadStudentResources() {
+  const role = getCurrentRole();
+  if (role !== 'student' && role !== 'parent') return;
+  await renderDailyMcqs(role);
+  await renderQuestionPapers(role);
+}
+
+async function renderDailyMcqs(role) {
+  const summary = document.getElementById('studentMcqSummary');
+  const list = document.getElementById('studentMcqList');
+  if (!summary || !list) return;
+  try {
+    const data = role === 'parent' ? await API.getParentDailyMcqs() : await API.getStudentDailyMcqs();
+    const mcqs = data.mcqs || [];
+    summary.textContent = data.batchTitle
+      ? `${data.batchTitle} - ${mcqs.length} question(s)${data.availableUntil ? ' - ends ' + data.availableUntil : ''}`
+      : 'No active MCQ batch yet.';
+    if (!mcqs.length) { list.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No MCQs available right now.</div>'; return; }
+    if (role === 'parent') {
+      list.innerHTML = mcqs.map((mcq, idx) => `
+        <div style="padding:14px;border:1px solid rgba(255,255,255,0.08);border-radius:14px;background:rgba(255,255,255,0.02);">
+          <div style="font-weight:700;">${mcq.question || 'Question ' + (idx + 1)}</div>
+          <div style="color:var(--muted);font-size:0.82rem;margin-top:6px;">Student can attempt this in their dashboard.</div>
+        </div>`).join('');
+      return;
+    }
+    list.innerHTML = mcqs.map((mcq, idx) => {
+      const options = Array.isArray(mcq.options) ? mcq.options : [];
+      const questionLabel = mcq.question ? mcq.question : 'Question ' + (idx + 1);
+      const optionHtml = options.map((opt, optIndex) => {
+        const option = typeof opt === 'string' ? { text: opt, imageUrl: '' } : { text: opt?.text || '', imageUrl: opt?.imageUrl || '' };
+        return `
+          <button class="btn-outline-sm" style="text-align:left;display:grid;gap:8px;" onclick="submitDailyMcqAnswer(${mcq.id}, ${optIndex})">
+            ${option.text ? `<span>${String.fromCharCode(65 + optIndex)}. ${option.text}</span>` : `<span>${String.fromCharCode(65 + optIndex)}.</span>`}
+            ${option.imageUrl ? `<img src="${option.imageUrl}" alt="Option ${optIndex + 1}" style="max-width:180px;width:100%;border-radius:12px;border:1px solid rgba(255,255,255,0.08);display:block;" />` : ''}
+          </button>`;
+      }).join('');
+      return `
+        <div style="padding:14px;border:1px solid rgba(255,255,255,0.08);border-radius:14px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:10px;">
+          <div style="font-weight:700;">${questionLabel}</div>
+          <div style="display:grid;gap:8px;">${optionHtml}</div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    summary.textContent = err.message || 'Unable to load MCQs.';
+    list.innerHTML = '';
   }
-  API.logoutStudent();
 }
 
-function runRevealAnimations() {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) entry.target.classList.add('visible');
-    });
-  }, { threshold: 0.15 });
+// ── PAGE LOAD — FIXED teacher dashboard loading ───────────────────────────────
+window.addEventListener('load', async () => {
+  // Always render MCQ cards on load
+  renderTeacherMcqCards();
 
-  document.querySelectorAll('.animate-in').forEach((node) => observer.observe(node));
-}
+  const role = getCurrentRole();
 
-async function boot() {
-  runRevealAnimations();
-  updateSubjectVisibility();
-  $('regClass')?.addEventListener('change', updateSubjectVisibility);
-  document.addEventListener('click', (event) => {
-    const profileMenu = $('profileMenu');
-    if (profileMenu && !profileMenu.contains(event.target)) closeProfileMenu();
-  });
+  // Apply session UI first
+  updateHomeForSession();
 
-  const role = currentRole();
   if (role === 'teacher') {
-    await loadTeacherDashboard();
+    // Load all teacher data in parallel for speed
+    try {
+      await Promise.all([
+        loadTeacherAttendance(),
+        loadTeacherMcqs(),
+        loadTeacherDoubts()
+      ]);
+    } catch (e) {
+      console.warn('Teacher data load error:', e.message);
+    }
+    updateDashboardAttendanceCards();
+    renderNavProfile();
+
   } else if (role === 'student') {
-    await loadStudentDashboard();
-  } else {
-    updateRoleVisibility(null);
-    switchTab('student', $('studentDashTab'));
+    try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
+    try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
+    try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
+
+  } else if (role === 'parent') {
+    try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
+    try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
-}
-
-window.openLoginModal = openLoginModal;
-window.closeLoginModal = closeLoginModal;
-window.openRegisterModal = openRegisterModal;
-window.closeRegisterModal = closeRegisterModal;
-window.openDoubtModal = openDoubtModal;
-window.closeDoubtModal = closeDoubtModal;
-window.toggleMenu = toggleMenu;
-window.toggleProfileMenu = toggleProfileMenu;
-window.setLoginType = setLoginType;
-window.loginStudentWithPassword = loginStudentWithPassword;
-window.loginTeacher = loginTeacher;
-window.startAssessment = startAssessment;
-window.prevQ = prevQ;
-window.nextQ = nextQ;
-window.selectAnswer = selectAnswer;
-window.switchTab = switchTab;
-window.loadTeacherAttendance = loadTeacherAttendance;
-window.saveTeacherAttendance = saveTeacherAttendance;
-window.saveTeacherWeeklyTests = saveTeacherWeeklyTests;
-window.saveTeacherFees = saveTeacherFees;
-window.logoutCurrentUser = logoutCurrentUser;
-
-window.addEventListener('load', boot);
+});
 
 
 
