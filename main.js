@@ -46,6 +46,9 @@ function toggleMenu() {
 
 // ── 4. DASHBOARD TABS ─────────────────────────────────────────────────────────
 function switchTab(tab, el) {
+  const role = getCurrentRole();
+  if (tab === 'teacher' && role !== 'teacher') return;
+  if (tab === 'student' && role === 'teacher') return;
   document.querySelectorAll('.dash-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.dash-content').forEach(c => {
     c.classList.remove('active');
@@ -1125,7 +1128,14 @@ function updateHomeForSession() {
     }
   } else if (role === 'student') {
     if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
+    if (teacherTab) { teacherTab.style.display = 'none'; teacherTab.classList.remove('active'); }
     if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
+    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
+  } else if (role === 'parent') {
+    if (studentTab) { studentTab.style.display = 'inline-block'; studentTab.classList.add('active'); }
+    if (teacherTab) { teacherTab.style.display = 'none'; teacherTab.classList.remove('active'); }
+    if (studentContent) { studentContent.classList.add('active'); studentContent.style.display = 'grid'; }
+    if (teacherContent) { teacherContent.classList.remove('active'); teacherContent.style.display = 'none'; }
   } else {
     // No role — show all tabs, student active by default
     [studentTab, teacherTab].forEach(t => { if (t) t.style.display = 'inline-block'; });
@@ -1702,7 +1712,6 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
-
 
 
 
