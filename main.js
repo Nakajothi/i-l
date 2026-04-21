@@ -778,6 +778,80 @@ async function refreshRoleData() {
   renderTodayTimetableReminder();
 }
 
+function renderStudentWeeklyTestCard(profile, now) {
+  const wrap = document.getElementById('parentWeeklyTests');
+  if (!wrap) return;
+  const tests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
+  if (!tests.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:0.88rem;">Weekly test marks will appear here once teachers enter them.</div>';
+    setUpdatedLabel('parentWeeklyTestsUpdated', now);
+    return;
+  }
+  wrap.innerHTML = tests.slice(0, 5).map((test) => `
+    <div class="metric-row">
+      <div>
+        <div class="metric-value">${test.title || 'Weekly Test'}</div>
+        <div class="metric-label">${test.test_date || ''}${test.notes ? ' - ' + test.notes : ''}</div>
+      </div>
+      <span class="metric-value">${Number(test.marks_obtained || 0)}/${Number(test.total_marks || 0)}</span>
+    </div>
+  `).join('');
+  setUpdatedLabel('parentWeeklyTestsUpdated', now);
+}
+
+function renderStudentTopicCards(profile) {
+  const topicWrap = document.getElementById('parentTopicProgress');
+  const strongWrap = document.getElementById('parentStrongTopics');
+  const weakWrap = document.getElementById('parentWeakTopics');
+  if (!topicWrap && !strongWrap && !weakWrap) return;
+
+  const weeklyTests = Array.isArray(profile.weeklyTests) ? profile.weeklyTests : [];
+  const overallAttendance = Number(profile.attendanceSummary?.overall?.percentage || 0);
+  const averageScore = weeklyTests.length
+    ? Math.round(weeklyTests.reduce((sum, test) => {
+        const total = Number(test.total_marks || 0);
+        const marks = Number(test.marks_obtained || 0);
+        return sum + (total ? ((marks / total) * 100) : 0);
+      }, 0) / weeklyTests.length)
+    : 0;
+  const pendingFees = Number(profile.feeSummary?.pending || 0);
+
+  if (topicWrap) {
+    topicWrap.innerHTML = weeklyTests.length
+      ? `
+        <div class="progress-bar-wrap">
+          <div class="progress-label"><span>Average Weekly Test Score</span><span>${averageScore}%</span></div>
+          <div class="progress-bar"><div class="progress-fill purple" style="width:${Math.max(0, Math.min(100, averageScore))}%"></div></div>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-label"><span>Attendance Consistency</span><span>${overallAttendance}%</span></div>
+          <div class="progress-bar"><div class="progress-fill blue" style="width:${Math.max(0, Math.min(100, overallAttendance))}%"></div></div>
+        </div>
+      `
+      : '<div style="color:var(--muted);font-size:0.88rem;">Topic-wise progress will appear here after your latest teacher-entered tests.</div>';
+  }
+
+  if (strongWrap) {
+    const strongItems = [];
+    if (averageScore >= 75) strongItems.push('Weekly test accuracy');
+    if (overallAttendance >= 85) strongItems.push('Attendance consistency');
+    if (pendingFees === 0 && profile.feeSummary) strongItems.push('Fee status is clear');
+    strongWrap.innerHTML = strongItems.length
+      ? strongItems.map((item) => `<div class="alert-pill blue"><div class="alert-title blue">${item}</div><div class="alert-desc">This area is looking healthy right now.</div></div>`).join('')
+      : '<span style="color:#8888AA;font-size:0.88rem;">Strong areas will appear once more data builds up.</span>';
+  }
+
+  if (weakWrap) {
+    const weakItems = [];
+    if (weeklyTests.length && averageScore < 75) weakItems.push('Weekly test follow-up');
+    if (overallAttendance < 85) weakItems.push('Attendance follow-up');
+    if (pendingFees > 0) weakItems.push('Fee pending');
+    weakWrap.innerHTML = weakItems.length
+      ? weakItems.map((item) => `<div class="alert-pill pink"><div class="alert-title pink">${item}</div><div class="alert-desc">This needs attention in the current flow.</div></div>`).join('')
+      : '<span style="color:#8888AA;font-size:0.88rem;">No urgent weak areas flagged right now.</span>';
+  }
+}
+
 // ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 function setElementText(id, value) {
   const node = document.getElementById(id);
@@ -871,42 +945,44 @@ function updateDashboardAttendanceCards() {
   const streakValue = Number(studentProfile.mcqStreak || 0);
   setElementText('studentStreakValue', streakValue + ' day' + (streakValue === 1 ? '' : 's'));
   setUpdatedLabel('studentStreakUpdated', now);
- 
-  // ── Parent attendance + fee cards ──
-  // Normalise: the API response has attendance at report.attendanceSummary
-  // AND at the flat top-level — handle both.
-  const derivedParentState = role === 'student' ? deriveParentReportFromStudentState() : {};
-  const effectiveParentApiResponse = Object.keys(parentApiResponse || {}).length ? parentApiResponse : derivedParentState;
-  const parentReport  = effectiveParentApiResponse.report || effectiveParentApiResponse;
-  const parentStudent = effectiveParentApiResponse.student || parentStored || studentProfile.student || studentStored;
- 
-  const parentMonth   = parentReport?.attendanceSummary?.month  || parentReport?.attendance || null;
-  const parentOverall = parentReport?.attendanceSummary?.overall || parentMonth;
- 
-  if (parentMonth || parentStudent?.name) {
-    setElementText('parentAttendanceMonth',          `${parentMonth?.present || 0} / ${parentMonth?.total || 0} days`);
-    setElementText('parentAttendanceOverall',        `${parentOverall?.percentage || 0}%`);
-    setElementText('parentAttendanceStudent',        parentStudent?.name || 'Linked student');
-    setElementText('parentAttendanceProgressLabel',  `${parentOverall?.percentage || 0}%`);
-    setElementWidth('parentAttendanceProgress',      `${Math.max(0, Math.min(100, Number(parentOverall?.percentage || 0)))}%`);
-    setUpdatedLabel('parentAttendanceUpdated', now);
-  }
- 
-  const feeSummary = parentReport?.feeSummary || studentProfile.feeSummary || null;
-  const feeStudent = parentStudent?.class ? parentStudent : (studentProfile.student || studentStored || {});
-  if (feeSummary || feeStudent?.class) {
-    setElementText('parentFeeBatch',   feeStudent?.class ? `Class ${feeStudent.class}` : 'Class --');
-    const pendingAmt = Number(feeSummary?.pending || 0);
-    setElementText('parentFeeStatus',  feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
-    setElementText('parentFeePaid',    `Rs ${feeSummary?.totalPaid || 0}`);
-    setElementText('parentFeePending', `Rs ${feeSummary?.pending   || 0}`);
-    setUpdatedLabel('parentFeeUpdated', now);
-  }
- 
-  // ── Re-inject ALL parent tab widgets from cache (so tab-switch stays live) ──
-  if ((role === 'parent' || role === 'student') && Object.keys(effectiveParentApiResponse || {}).length) {
-    if (typeof injectParentTabData === 'function') {
-      injectParentTabData(parentReport, parentStudent);
+
+  if (role === 'student') {
+    const feeSummary = studentProfile.feeSummary || null;
+    const feeStudent = studentProfile.student || studentStored || {};
+    if (feeSummary || feeStudent?.class) {
+      setElementText('parentFeeBatch', feeStudent?.class ? `Class ${feeStudent.class}` : 'Class --');
+      const pendingAmt = Number(feeSummary?.pending || 0);
+      setElementText('parentFeeStatus', feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
+      setElementText('parentFeePaid', `Rs ${feeSummary?.totalPaid || 0}`);
+      setElementText('parentFeePending', `Rs ${feeSummary?.pending || 0}`);
+      const feeLastPaidRow = document.getElementById('parentFeeLastPaid');
+      if (feeLastPaidRow) {
+        const lastPayment = Array.isArray(feeSummary?.payments) && feeSummary.payments.length ? feeSummary.payments[0] : null;
+        feeLastPaidRow.innerHTML = `<span class="metric-label">Last Paid</span><span class="metric-value">${lastPayment ? `${lastPayment.paid_on} - Rs ${lastPayment.amount_paid}` : '-'}</span>`;
+      }
+      setUpdatedLabel('parentFeeUpdated', now);
+    }
+    renderStudentWeeklyTestCard(studentProfile, now);
+    renderStudentTopicCards(studentProfile);
+  } else {
+    const derivedParentState = role === 'student' ? deriveParentReportFromStudentState() : {};
+    const effectiveParentApiResponse = Object.keys(parentApiResponse || {}).length ? parentApiResponse : derivedParentState;
+    const parentReport  = effectiveParentApiResponse.report || effectiveParentApiResponse;
+    const parentStudent = effectiveParentApiResponse.student || parentStored || studentProfile.student || studentStored;
+    const feeSummary = parentReport?.feeSummary || studentProfile.feeSummary || null;
+    const feeStudent = parentStudent?.class ? parentStudent : (studentProfile.student || studentStored || {});
+    if (feeSummary || feeStudent?.class) {
+      setElementText('parentFeeBatch', feeStudent?.class ? `Class ${feeStudent.class}` : 'Class --');
+      const pendingAmt = Number(feeSummary?.pending || 0);
+      setElementText('parentFeeStatus', feeSummary ? (pendingAmt > 0 ? `Rs ${pendingAmt} pending` : 'Paid up') : 'No entries yet');
+      setElementText('parentFeePaid', `Rs ${feeSummary?.totalPaid || 0}`);
+      setElementText('parentFeePending', `Rs ${feeSummary?.pending || 0}`);
+      setUpdatedLabel('parentFeeUpdated', now);
+    }
+    if ((role === 'parent' || role === 'student') && Object.keys(effectiveParentApiResponse || {}).length) {
+      if (typeof injectParentTabData === 'function') {
+        injectParentTabData(parentReport, parentStudent);
+      }
     }
   }
  
