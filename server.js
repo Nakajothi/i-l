@@ -779,6 +779,59 @@ app.get('/api/student/profile', authStudent, (req, res) => {
   });
 });
 
+app.get('/api/student/dashboard/attendance', authStudent, (req, res) => {
+  try {
+    const studentId = req.student.id;
+    const student = db.prepare('SELECT id, name, class FROM students WHERE id=?').get(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const monthKey = getCurrentMonthPrefix();
+    const monthAttendance = buildAttendanceSummary(studentId, monthKey);
+    const overallAttendance = buildAttendanceSummary(studentId);
+    const weeklySummary = buildWeeklyStudentSummary(studentId);
+    res.json({
+      student,
+      attendanceSummary: {
+        month: monthAttendance,
+        overall: overallAttendance
+      },
+      weeklySummary: weeklySummary?.attendance || { present: 0, total: 0, percentage: 0 }
+    });
+  } catch (error) {
+    console.error('[GET /api/student/dashboard/attendance]', error.message);
+    res.status(500).json({ error: 'Could not load student attendance card.' });
+  }
+});
+
+app.get('/api/student/dashboard/fees', authStudent, (req, res) => {
+  try {
+    const studentId = req.student.id;
+    const student = db.prepare('SELECT id, name, class FROM students WHERE id=?').get(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const feeSummary = buildFeeSummary(studentId, student.class);
+    res.json({ student, feeSummary });
+  } catch (error) {
+    console.error('[GET /api/student/dashboard/fees]', error.message);
+    res.status(500).json({ error: 'Could not load student fee card.' });
+  }
+});
+
+app.get('/api/student/dashboard/weekly-tests', authStudent, (req, res) => {
+  try {
+    const studentId = req.student.id;
+    const student = db.prepare('SELECT id, name, class FROM students WHERE id=?').get(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const weeklyTests = getStudentWeeklyTests(studentId);
+    const latestAssessment = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1').get(studentId);
+    const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
+    const weakTopics = latestAssessment?.weak_topics ? JSON.parse(latestAssessment.weak_topics || '[]') : [];
+    const strongTopics = latestAssessment?.strong_topics ? JSON.parse(latestAssessment.strong_topics || '[]') : [];
+    res.json({ student, weeklyTests, topicScores, weakTopics, strongTopics });
+  } catch (error) {
+    console.error('[GET /api/student/dashboard/weekly-tests]', error.message);
+    res.status(500).json({ error: 'Could not load student weekly test card.' });
+  }
+});
+
 // ============================================================
 //  PARENT ROUTES
 // ============================================================
