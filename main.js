@@ -733,7 +733,7 @@ async function refreshStudentParentDashboard() {
     updateDashboardAttendanceCards();
     renderNavProfile();
   } catch (err) {
-    console.warn('Student parent report refresh failed:', err.message || err);
+    console.warn('Student dashboard support refresh failed:', err.message || err);
   }
 }
 
