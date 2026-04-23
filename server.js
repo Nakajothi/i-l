@@ -38,7 +38,7 @@ function buildWeeklyStudentSummary(studentId) {
   const attendance = db.prepare(`
     SELECT SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS present, COUNT(*) AS total
     FROM attendance
-    WHERE student_id=? AND date >= (CURRENT_DATE - INTERVAL '6 days')
+    WHERE student_id=? AND CAST(date AS DATE) >= (CURRENT_DATE - INTERVAL '6 days')
   `).get(studentId);
   const timetable = db.prepare(`
     SELECT SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END) AS completed, COUNT(*) AS total
@@ -1569,7 +1569,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
