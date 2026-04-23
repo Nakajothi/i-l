@@ -185,6 +185,7 @@ const API = {
   // ── TEACHER PAPERS ───────────────────────────────────
   getTeacherQuestionPapers()           { return this.get('/teacher/question-papers', this.teacherToken()); },
   createTeacherQuestionPaper(payload)  { return this.post('/teacher/question-papers', payload, this.teacherToken()); },
+  deleteTeacherQuestionPaper(id)       { return this.delete('/teacher/question-papers/' + id, this.teacherToken()); },
 
   // ── TEACHER TESTS & FEES ─────────────────────────────
   getTeacherWeeklyTests()              { return this.get('/teacher/weekly-tests', this.teacherToken()); },
