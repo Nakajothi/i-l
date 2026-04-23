@@ -1303,7 +1303,10 @@ function renderTeacherPaperList(papers) {
         <div style="font-weight:700;">${paper.title}</div>
         <div style="color:var(--muted);font-size:0.84rem;margin-top:4px;">Class ${paper.class_scope || 'all'} - ${paper.resource_type || 'document'} - ${paper.posted_at || ''}</div>
       </div>
-      <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="color:var(--blue);font-weight:700;">Open ↗</a>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="color:var(--blue);font-weight:700;">Open ↗</a>
+        <button class="btn-ghost" style="padding:10px 14px;" onclick="deleteTeacherQuestionPaper(${Number(paper.id) || 0})">Remove</button>
+      </div>
     </div>
   `).join('');
 }
@@ -1331,6 +1334,24 @@ async function createTeacherQuestionPaper() {
     await loadTeacherQuestionPapers();
   } catch (err) {
     showTeacherPanelMessage('teacherPaperMessage', err.message || 'Could not add question paper.', true);
+  }
+}
+
+async function deleteTeacherQuestionPaper(paperId) {
+  if (!paperId) {
+    showTeacherPanelMessage('teacherPaperMessage', 'Could not identify the question paper to remove.', true);
+    return;
+  }
+  if (!window.confirm('Remove this question paper from teacher, student, and parent views?')) return;
+  try {
+    await API.deleteTeacherQuestionPaper(paperId);
+    showTeacherPanelMessage('teacherPaperMessage', 'Question paper removed successfully.', false);
+    await loadTeacherQuestionPapers();
+    if (getCurrentRole() === 'student' || getCurrentRole() === 'parent') {
+      await loadStudentResources();
+    }
+  } catch (err) {
+    showTeacherPanelMessage('teacherPaperMessage', err.message || 'Could not remove question paper.', true);
   }
 }
 
@@ -1720,6 +1741,7 @@ window.addEventListener('load', async () => {
     try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
   }
 });
+
 
 
 
