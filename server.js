@@ -1376,6 +1376,15 @@ app.post('/api/teacher/question-papers', authTeacher, (req, res) => {
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
+app.delete('/api/teacher/question-papers/:id', authTeacher, (req, res) => {
+  const paperId = Number(req.params.id);
+  if (!paperId) return res.status(400).json({ error: 'Valid question paper id is required.' });
+  const existing = db.prepare('SELECT id FROM question_papers WHERE id=?').get(paperId);
+  if (!existing) return res.status(404).json({ error: 'Question paper not found.' });
+  db.prepare('DELETE FROM question_papers WHERE id=?').run(paperId);
+  res.json({ success: true, deletedId: paperId });
+});
+
 // ============================================================
 //  WEEKLY TESTS & FEES — TEACHER
 // ============================================================
@@ -1569,7 +1578,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
