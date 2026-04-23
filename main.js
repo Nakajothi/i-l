@@ -846,6 +846,7 @@ function renderStudentTopicCardsData(payload) {
 
   const weeklyTests = Array.isArray(payload.weeklyTests) ? payload.weeklyTests : [];
   const overallAttendance = Number(payload.attendanceSummary?.overall?.percentage || 0);
+  const feeSummary = payload.feeSummary || null;
   const averageScore = weeklyTests.length
     ? Math.round(weeklyTests.reduce((sum, test) => {
         const total = Number(test.total_marks || 0);
@@ -853,7 +854,7 @@ function renderStudentTopicCardsData(payload) {
         return sum + (total ? ((marks / total) * 100) : 0);
       }, 0) / weeklyTests.length)
     : 0;
-  const pendingFees = Number(payload.feeSummary?.pending || 0);
+  const pendingFees = Number(feeSummary?.pending || 0);
 
   if (topicWrap) {
     topicWrap.innerHTML = weeklyTests.length
@@ -874,7 +875,7 @@ function renderStudentTopicCardsData(payload) {
     const strongItems = [];
     if (averageScore >= 75) strongItems.push('Weekly test accuracy');
     if (overallAttendance >= 85) strongItems.push('Attendance consistency');
-    if (pendingFees === 0 && profile.feeSummary) strongItems.push('Fee status is clear');
+    if (pendingFees === 0 && feeSummary) strongItems.push('Fee status is clear');
     strongWrap.innerHTML = strongItems.length
       ? strongItems.map((item) => `<div class="alert-pill blue"><div class="alert-title blue">${item}</div><div class="alert-desc">This area is looking healthy right now.</div></div>`).join('')
       : '<span style="color:#8888AA;font-size:0.88rem;">Strong areas will appear once more data builds up.</span>';
@@ -1050,8 +1051,15 @@ function updateDashboardAttendanceCards() {
       }
       setUpdatedLabel('parentFeeUpdated', now);
     }
-    renderStudentWeeklyTestCard(studentProfile, now);
-    renderStudentTopicCards(studentProfile);
+    renderStudentWeeklyTestCardData(studentProfile.weeklyTests || [], now);
+    renderStudentTopicCardsData({
+      weeklyTests: studentProfile.weeklyTests || [],
+      attendanceSummary: studentProfile.attendanceSummary || {},
+      feeSummary: studentProfile.feeSummary || null,
+      topicScores: {},
+      weakTopics: [],
+      strongTopics: []
+    });
   } else {
     const derivedParentState = role === 'student' ? deriveParentReportFromStudentState() : {};
     const effectiveParentApiResponse = Object.keys(parentApiResponse || {}).length ? parentApiResponse : derivedParentState;
