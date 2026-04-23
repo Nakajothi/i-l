@@ -50,6 +50,7 @@ const API = {
 
   get(path, token)        { return this.request('GET',  path, null, token); },
   post(path, body, token) { return this.request('POST', path, body, token); },
+  delete(path, token)     { return this.request('DELETE', path, null, token); },
 
   // ── STUDENT ──────────────────────────────────────────
   async registerStudent(name, cls, mobile, email, password, subject) {
