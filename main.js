@@ -95,8 +95,10 @@ function closeDoubtModal() {
   document.body.style.overflow = '';
   const q = document.getElementById('doubtQuestionText');
   const i = document.getElementById('doubtQuestionImage');
+  const p = document.getElementById('doubtQuestionImagePreview');
   if (q) q.value = '';
   if (i) i.value = '';
+  if (p) { p.style.display = 'none'; p.innerHTML = ''; }
 }
 
 async function submitStudentDoubt() {
@@ -410,25 +412,27 @@ async function startAssessment() {
   const name = (document.getElementById('regName')?.value || '').trim();
   const cls = (document.getElementById('regClass')?.value || '').trim();
   const subject = (document.getElementById('regSubject')?.value || '').trim();
+  const board = (document.getElementById('regBoard')?.value || '').trim();
   const mobile = (document.getElementById('regMobile')?.value || '').trim();
   const email = (document.getElementById('regEmail')?.value || '').trim();
   const password = (document.getElementById('regPassword')?.value || '').trim();
 
   if (!name) { flashField('regName', 'Please enter student name.'); return; }
   if (!cls) { flashField('regClass', 'Please select your class.'); return; }
+  if (!board) { flashField('regBoard', 'Please choose the board.'); return; }
   if ((cls === '11' || cls === '12') && !subject) { flashField('regSubject', 'Please choose Maths or Business Maths.'); return; }
   if (mobile.replace(/\D/g, '').length < 10) { flashField('regMobile', 'Enter valid 10-digit mobile.'); return; }
   if (!email || !email.includes('@')) { flashField('regEmail', 'Enter valid email address.'); return; }
   if (password.length < 6) { flashField('regPassword', 'Password must be at least 6 characters.'); return; }
 
   try {
-    await API.registerStudent(name, cls, mobile, email, password, subject || 'maths');
+    await API.registerStudent(name, cls, mobile, email, password, subject || 'maths', board);
   } catch (err) {
     alert(err.message || 'Registration failed. Please try again.');
     return;
   }
 
-  studentData = { name, cls, class: cls, subject: subject || 'maths', mobile, email };
+  studentData = { name, cls, class: cls, subject: subject || 'maths', board, mobile, email };
   localStorage.setItem('ilearn_student', JSON.stringify(studentData));
   activeQuestions = classQuestions[cls] || classQuestions['9'];
   assessAnswers = {};
@@ -1177,11 +1181,19 @@ function renderTeacherMcqCards(count = 10) {
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:18px;padding:16px;">
       <div style="font-size:0.78rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Question ${index + 1}</div>
       <div class="form-group" style="margin:0 0 10px 0;"><label>Question Text</label><textarea id="teacherMcqQuestion${index + 1}" rows="3" placeholder="Enter question ${index + 1}"></textarea></div>
-      <div class="form-group" style="margin:0 0 10px 0;"><label>Question Image URL / Path</label><input type="text" id="teacherMcqQuestionImage${index + 1}" placeholder="Paste image URL or path (optional)" /></div>
+      <div class="form-group" style="margin:0 0 10px 0;">
+        <label>Question Image</label>
+        <input type="text" id="teacherMcqQuestionImage${index + 1}" data-preview-id="teacherMcqQuestionImagePreview${index + 1}" placeholder="Paste image URL/path or press Ctrl+V to paste image" onpaste="handleTeacherImagePaste(event, this)" oninput="updateTeacherImagePreview(this)" />
+        <div id="teacherMcqQuestionImagePreview${index + 1}" style="display:none;margin-top:10px;"></div>
+      </div>
       ${[1, 2, 3, 4].map((optionNumber) => `
         <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px;">
           <div class="form-group" style="margin:0;"><label>Option ${optionNumber} Text</label><input type="text" id="teacherMcq${index + 1}Option${optionNumber}" placeholder="Option ${optionNumber} text" /></div>
-          <div class="form-group" style="margin:0;"><label>Option ${optionNumber} Image URL / Path</label><input type="text" id="teacherMcq${index + 1}Option${optionNumber}Image" placeholder="Paste option ${optionNumber} image URL or path (optional)" /></div>
+          <div class="form-group" style="margin:0;">
+            <label>Option ${optionNumber} Image</label>
+            <input type="text" id="teacherMcq${index + 1}Option${optionNumber}Image" data-preview-id="teacherMcq${index + 1}Option${optionNumber}ImagePreview" placeholder="Paste image URL/path or press Ctrl+V to paste image" onpaste="handleTeacherImagePaste(event, this)" oninput="updateTeacherImagePreview(this)" />
+            <div id="teacherMcq${index + 1}Option${optionNumber}ImagePreview" style="display:none;margin-top:10px;"></div>
+          </div>
         </div>
       `).join('')}
       <div class="form-group" style="margin:0;"><label>Correct Option</label>
@@ -1194,6 +1206,45 @@ function renderTeacherMcqCards(count = 10) {
 function regenerateTeacherMcqCards() {
   const count = document.getElementById('teacherMcqCount')?.value || 10;
   renderTeacherMcqCards(count);
+}
+
+function isLikelyImageValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized.startsWith('data:image/')
+    || normalized.includes('.png')
+    || normalized.includes('.jpg')
+    || normalized.includes('.jpeg')
+    || normalized.includes('.gif')
+    || normalized.includes('.webp')
+    || normalized.includes('.svg');
+}
+
+function updateTeacherImagePreview(input) {
+  const preview = document.getElementById(input?.dataset?.previewId || '');
+  if (!preview) return;
+  const value = String(input.value || '').trim();
+  if (!value || !isLikelyImageValue(value)) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+  preview.style.display = 'block';
+  preview.innerHTML = `<img src="${value}" alt="Preview" style="max-width:180px;width:100%;border-radius:12px;border:1px solid rgba(255,255,255,0.08);display:block;" />`;
+}
+
+function handleTeacherImagePaste(event, input) {
+  const items = Array.from(event.clipboardData?.items || []);
+  const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+  if (!imageItem) return;
+  const file = imageItem.getAsFile();
+  if (!file) return;
+  event.preventDefault();
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = String(reader.result || '');
+    updateTeacherImagePreview(input);
+  };
+  reader.readAsDataURL(file);
 }
 
 function syncTeacherSubjectScope(selectId, rowId, subjectId) {
@@ -1249,7 +1300,7 @@ function renderTeacherMcqList(mcqs) {
       <div style="padding:${index ? '16px 0 0' : '0'};margin-top:${index ? '16px' : '0'};border-top:${index ? '1px solid rgba(255,255,255,0.06)' : 'none'};">
         <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
           <div>
-            <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}${mcq.subject_scope && mcq.subject_scope !== 'all' ? ' - ' + (mcq.subject_scope === 'business-maths' ? 'Business Maths' : 'Maths') : ''}</div>
+            <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}${mcq.board_scope && mcq.board_scope !== 'all' ? ' - ' + (mcq.board_scope === 'cbse' ? 'CBSE' : 'State Board') : ''}${mcq.subject_scope && mcq.subject_scope !== 'all' ? ' - ' + (mcq.subject_scope === 'business-maths' ? 'Business Maths' : 'Maths') : ''}</div>
             <div style="font-weight:700;line-height:1.5;">${mcq.question_count || 0} questions - ends ${mcq.available_until || 'in 24 hours'}</div>
           </div>
           <div style="min-width:220px;text-align:right;">
@@ -1281,20 +1332,24 @@ async function createTeacherMcq() {
   const title = (document.getElementById('teacherMcqTitle')?.value || '').trim() || 'Daily MCQ Batch';
   const classScope = (document.getElementById('teacherMcqClass')?.value || 'all').trim();
   const subjectScope = (document.getElementById('teacherMcqSubject')?.value || 'all').trim();
+  const boardScope = (document.getElementById('teacherMcqBoard')?.value || 'all').trim();
   const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 10)));
   const questions = Array.from({ length: questionCount }, (_, index) => {
     const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
     const imageUrl = (document.getElementById(`teacherMcqQuestionImage${index + 1}`)?.value || '').trim();
-    const options = [1, 2, 3, 4].map((optionIndex) => (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}`)?.value || '').trim());
+    const options = [1, 2, 3, 4].map((optionIndex) => ({
+      text: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}`)?.value || '').trim(),
+      imageUrl: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}Image`)?.value || '').trim()
+    }));
     const correctIndex = Number(document.getElementById(`teacherMcq${index + 1}Correct`)?.value || 0);
     return { question, imageUrl, options, correctIndex };
-  }).filter((item) => item.question || item.imageUrl || item.options.some((option) => option));
+  }).filter((item) => item.question || item.imageUrl || item.options.some((option) => option.text || option.imageUrl));
   if (!questions.length) { showTeacherMcqMessage('Add at least one MCQ card before posting.', true); return; }
-  if (questions.some((item) => (!item.question && !item.imageUrl) || item.options.some((option) => !option))) {
-    showTeacherMcqMessage('Each filled MCQ card must have question text or image, plus 4 options.', true); return;
+  if (questions.some((item) => (!item.question && !item.imageUrl) || item.options.some((option) => !option.text && !option.imageUrl))) {
+    showTeacherMcqMessage('Each filled MCQ card must have question text or image, plus 4 options with text or image.', true); return;
   }
   try {
-    await API.createTeacherMcq({ title, classScope, subjectScope, questions });
+    await API.createTeacherMcq({ title, classScope, subjectScope, boardScope, questions });
     const titleNode = document.getElementById('teacherMcqTitle');
     if (titleNode) titleNode.value = '';
     showTeacherMcqMessage(questions.length + ' question(s) posted successfully.', false);
@@ -1313,7 +1368,7 @@ function renderTeacherPaperList(papers) {
     <div style="padding:${index ? '16px 0 0' : '0'};margin-top:${index ? '16px' : '0'};border-top:${index ? '1px solid rgba(255,255,255,0.06)' : 'none'};display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
       <div>
         <div style="font-weight:700;">${paper.title}</div>
-        <div style="color:var(--muted);font-size:0.84rem;margin-top:4px;">Class ${paper.class_scope || 'all'} - ${paper.resource_type || 'document'} - ${paper.posted_at || ''}</div>
+        <div style="color:var(--muted);font-size:0.84rem;margin-top:4px;">Class ${paper.class_scope || 'all'}${paper.board_scope && paper.board_scope !== 'all' ? ' - ' + (paper.board_scope === 'cbse' ? 'CBSE' : 'State Board') : ''}${paper.subject_scope && paper.subject_scope !== 'all' ? ' - ' + (paper.subject_scope === 'business-maths' ? 'Business Maths' : 'Maths') : ''} - ${paper.resource_type || 'document'} - ${paper.posted_at || ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <a href="${paper.resource_url}" target="_blank" rel="noreferrer" style="color:var(--blue);font-weight:700;">Open ↗</a>
@@ -1337,11 +1392,12 @@ async function createTeacherQuestionPaper() {
   const title = (document.getElementById('teacherPaperTitle')?.value || '').trim();
   const classScope = (document.getElementById('teacherPaperClass')?.value || 'all').trim();
   const subjectScope = (document.getElementById('teacherPaperSubject')?.value || 'all').trim();
+  const boardScope = (document.getElementById('teacherPaperBoard')?.value || 'all').trim();
   const resourceType = (document.getElementById('teacherPaperType')?.value || 'pdf').trim();
   const resourceUrl = (document.getElementById('teacherPaperUrl')?.value || '').trim();
   if (!title || !resourceUrl) { showTeacherPanelMessage('teacherPaperMessage', 'Please enter a title and the document URL/path.', true); return; }
   try {
-    await API.createTeacherQuestionPaper({ title, classScope, subjectScope, resourceType, resourceUrl });
+    await API.createTeacherQuestionPaper({ title, classScope, subjectScope, boardScope, resourceType, resourceUrl });
     ['teacherPaperTitle', 'teacherPaperUrl'].forEach((id) => { const node = document.getElementById(id); if (node) node.value = ''; });
     showTeacherPanelMessage('teacherPaperMessage', 'Question paper added successfully.', false);
     await loadTeacherQuestionPapers();
@@ -1567,7 +1623,8 @@ async function loadTeacherDoubts() {
           ` : `
             <div class="doubt-input" style="margin-top:12px;">
               <textarea id="doubt-answer-${doubt.id}" rows="3" placeholder="Type your reply here..."></textarea>
-              <input type="text" id="doubt-answer-img-${doubt.id}" placeholder="Image URL (optional)" />
+              <input type="text" id="doubt-answer-img-${doubt.id}" data-preview-id="doubt-answer-img-preview-${doubt.id}" placeholder="Paste image URL/path or press Ctrl+V to paste image" onpaste="handleTeacherImagePaste(event, this)" oninput="updateTeacherImagePreview(this)" />
+              <div id="doubt-answer-img-preview-${doubt.id}" style="display:none;margin-top:10px;"></div>
               <button class="btn-secondary" onclick="answerTeacherDoubt(${doubt.id})">Send Reply</button>
             </div>
           `}
@@ -1711,6 +1768,7 @@ async function renderDailyMcqs(role) {
       return `
         <div style="padding:14px;border:1px solid rgba(255,255,255,0.08);border-radius:14px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:10px;">
           <div style="font-weight:700;">${questionLabel}</div>
+          ${mcq.question_image ? `<img src="${mcq.question_image}" alt="Question ${idx + 1}" style="max-width:240px;width:100%;border-radius:12px;border:1px solid rgba(255,255,255,0.08);display:block;" />` : ''}
           <div style="display:grid;gap:8px;">${optionHtml}</div>
         </div>`;
     }).join('');
