@@ -82,7 +82,12 @@ function buildFeeSummary(studentId, studentClass) {
   return { totalDue, totalPaid: Math.round(totalPaid * 100) / 100, pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100), payments };
 }
 function buildTeacherStudentsSnapshot(selectedDate = '') {
-  const students = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students ORDER BY class, name').all();
+  const students = db.prepare(`
+    SELECT id, name, email, class, subject, approval_status, mobile, board, created_at
+    FROM students
+    WHERE COALESCE(approval_status, 'accepted') <> 'rejected'
+    ORDER BY class, name
+  `).all();
   const attendanceRows = db.prepare(`
     SELECT student_id,
            SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS present,
@@ -1552,7 +1557,12 @@ app.get('/api/debug/students-count', (req, res) => {
 app.get('/api/debug/teacher-students', (req, res) => {
   try {
     const selectedDate = String(req.query.date || '').trim();
-    const students     = db.prepare('SELECT id, name, email, class, subject, approval_status, mobile, board, created_at FROM students ORDER BY class, name').all();
+    const students     = db.prepare(`
+      SELECT id, name, email, class, subject, approval_status, mobile, board, created_at
+      FROM students
+      WHERE COALESCE(approval_status, 'accepted') <> 'rejected'
+      ORDER BY class, name
+    `).all();
     const attendanceByStudent = db.prepare("SELECT student_id, SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS presentCount, COUNT(*) AS totalCount FROM attendance GROUP BY student_id").all();
     const attendanceMap = new Map(attendanceByStudent.map((row) => [row.student_id, row]));
     const attendanceForDate = selectedDate ? db.prepare('SELECT student_id, status FROM attendance WHERE date=?').all(selectedDate) : [];
