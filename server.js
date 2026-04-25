@@ -160,8 +160,17 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
     };
   });
 }
-function getStudentQuestionPapers(studentClass) {
-  return db.prepare("SELECT id, title, class_scope, resource_type, resource_url, posted_at FROM question_papers WHERE class_scope=? OR class_scope='all' ORDER BY posted_at DESC LIMIT 10").all(String(studentClass || '').trim());
+function getStudentQuestionPapers(studentClass, studentSubject) {
+  const safeClass = String(studentClass || '').trim();
+  const safeSubject = normalizeStudentSubject(studentSubject, safeClass);
+  return db.prepare(`
+    SELECT id, title, class_scope, COALESCE(subject_scope, 'all') AS subject_scope, resource_type, resource_url, posted_at
+    FROM question_papers
+    WHERE (class_scope=? OR class_scope='all')
+      AND (COALESCE(subject_scope, 'all')='all' OR COALESCE(subject_scope, 'all')=?)
+    ORDER BY posted_at DESC
+    LIMIT 10
+  `).all(safeClass, safeSubject);
 }
 function getStudentMcqStreak(studentId) {
   const rows = db.prepare("SELECT DISTINCT DATE(submitted_at) as day FROM daily_mcq_submissions WHERE student_id=? ORDER BY day DESC").all(studentId);
@@ -181,14 +190,16 @@ function getStudentMcqStreak(studentId) {
 function getStudentWeeklyTests(studentId) {
   return db.prepare('SELECT title, test_date, marks_obtained, total_marks, notes, created_at FROM weekly_tests WHERE student_id=? ORDER BY test_date DESC, created_at DESC LIMIT 10').all(studentId);
 }
-function getStudentActiveMcqSet(studentId, studentClass) {
+function getStudentActiveMcqSet(studentId, studentClass, studentSubject) {
   const safeClass = String(studentClass || '').trim();
+  const safeSubject = normalizeStudentSubject(studentSubject, safeClass);
   const latestBatch = db.prepare(`
     SELECT batch_title, available_until FROM daily_mcqs
     WHERE active=1 AND (class_scope='all' OR class_scope=?)
+      AND (COALESCE(subject_scope, 'all')='all' OR COALESCE(subject_scope, 'all')=?)
       AND (available_until IS NULL OR available_until >= CURRENT_TIMESTAMP)
     ORDER BY created_at DESC LIMIT 1
-  `).get(safeClass);
+  `).get(safeClass, safeSubject);
   if (!latestBatch) return { batchTitle: null, availableUntil: null, questions: [] };
   const questions = db.prepare(`
     SELECT m.id, m.title, m.batch_title, m.question_no, m.question, m.question_image, m.options, m.available_until,
@@ -196,9 +207,10 @@ function getStudentActiveMcqSet(studentId, studentClass) {
     FROM daily_mcqs m
     LEFT JOIN daily_mcq_submissions s ON s.mcq_id = m.id AND s.student_id = ?
     WHERE m.active=1 AND m.batch_title = ? AND (m.class_scope='all' OR m.class_scope=?)
+      AND (COALESCE(m.subject_scope, 'all')='all' OR COALESCE(m.subject_scope, 'all')=?)
       AND (m.available_until IS NULL OR m.available_until >= CURRENT_TIMESTAMP)
     ORDER BY m.question_no ASC, m.created_at ASC
-  `).all(studentId, latestBatch.batch_title, safeClass).map((mcq) => ({ ...mcq, options: JSON.parse(mcq.options || '[]') }));
+  `).all(studentId, latestBatch.batch_title, safeClass, safeSubject).map((mcq) => ({ ...mcq, options: JSON.parse(mcq.options || '[]') }));
   return { batchTitle: latestBatch.batch_title, availableUntil: latestBatch.available_until, questions };
 }
 function getRecentStudentMcqs(studentId, limit = 10) {
@@ -552,6 +564,7 @@ db.exec(`
     options         TEXT    NOT NULL,
     correct_index   INTEGER NOT NULL,
     class_scope     TEXT    DEFAULT 'all',
+    subject_scope   TEXT    DEFAULT 'all',
     active          INTEGER NOT NULL DEFAULT 1,
     available_until TIMESTAMP,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -570,6 +583,7 @@ db.exec(`
     teacher_id    INTEGER REFERENCES teachers(id),
     title         TEXT    NOT NULL,
     class_scope   TEXT    DEFAULT 'all',
+    subject_scope TEXT    DEFAULT 'all',
     resource_type TEXT    DEFAULT 'pdf',
     resource_url  TEXT    NOT NULL,
     posted_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -624,6 +638,8 @@ db.exec(`
   "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_no     INTEGER DEFAULT 1",
   "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS available_until TIMESTAMP",
   "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS question_image  TEXT",
+  "ALTER TABLE daily_mcqs ADD COLUMN IF NOT EXISTS subject_scope   TEXT DEFAULT 'all'",
+  "ALTER TABLE question_papers ADD COLUMN IF NOT EXISTS subject_scope TEXT DEFAULT 'all'",
 ].forEach((sql) => { try { db.prepare(sql).run(); } catch (e) { /* already exists — ignore */ } });
 
 // PostgreSQL already treats NULLs as distinct in unique indexes.
@@ -815,8 +831,8 @@ app.get('/api/student/profile', authStudent, (req, res) => {
   const thisMonth        = getCurrentMonthPrefix();
   const monthAttendance  = buildAttendanceSummary(studentId, thisMonth);
   const overallAttendance= buildAttendanceSummary(studentId);
-  const dailyMcqSet      = getStudentActiveMcqSet(studentId, student.class);
-  const questionPapers   = getStudentQuestionPapers(student.class);
+  const dailyMcqSet      = getStudentActiveMcqSet(studentId, student.class, student.subject);
+  const questionPapers   = getStudentQuestionPapers(student.class, student.subject);
   const weeklyTests      = getStudentWeeklyTests(studentId);
   const feeSummary       = buildFeeSummary(studentId, student.class);
   const mcqStreak        = getStudentMcqStreak(studentId);
@@ -1068,9 +1084,9 @@ app.get('/api/parent/daily-mcqs', authParent, (req, res) => {
 app.get('/api/parent/question-papers', authParent, (req, res) => {
   const { studentId } = req.parent;
   if (!studentId) return res.status(404).json({ error: 'No student linked to this parent account' });
-  const student = db.prepare('SELECT id, class FROM students WHERE id=?').get(studentId);
+  const student = db.prepare('SELECT id, class, subject FROM students WHERE id=?').get(studentId);
   if (!student) return res.status(404).json({ error: 'Student not found' });
-  res.json({ papers: getStudentQuestionPapers(student.class || '') });
+  res.json({ papers: getStudentQuestionPapers(student.class || '', student.subject || '') });
 });
 
 // ============================================================
@@ -1238,15 +1254,15 @@ app.post('/api/timetable/slot-completion', authStudent, (req, res) => {
 //  MCQ & PAPERS — STUDENT
 // ============================================================
 app.get('/api/student/daily-mcqs', authStudent, (req, res) => {
-  const student = db.prepare('SELECT id, class FROM students WHERE id=?').get(req.student.id);
-  const set     = getStudentActiveMcqSet(req.student.id, student?.class || '');
+  const student = db.prepare('SELECT id, class, subject FROM students WHERE id=?').get(req.student.id);
+  const set     = getStudentActiveMcqSet(req.student.id, student?.class || '', student?.subject || '');
   res.json({ batchTitle: set.batchTitle, availableUntil: set.availableUntil, mcqs: set.questions });
 });
 
 app.get('/api/student/question-papers', authStudent, (req, res) => {
-  const student = db.prepare('SELECT id, class FROM students WHERE id=?').get(req.student.id);
+  const student = db.prepare('SELECT id, class, subject FROM students WHERE id=?').get(req.student.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
-  res.json({ papers: getStudentQuestionPapers(student.class || '') });
+  res.json({ papers: getStudentQuestionPapers(student.class || '', student.subject || '') });
 });
 
 app.post('/api/student/daily-mcqs/:id/submit', authStudent, (req, res) => {
@@ -1271,7 +1287,7 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
   try {
     const mcqRows = db.prepare(`
       SELECT COALESCE(m.batch_title, m.title) AS batch_title,
-             MIN(m.title) AS title, m.class_scope,
+             MIN(m.title) AS title, m.class_scope, COALESCE(m.subject_scope, 'all') AS subject_scope,
              MAX(m.available_until) AS available_until,
              MAX(m.created_at) AS created_at,
              COUNT(DISTINCT m.id) AS question_count,
@@ -1279,24 +1295,24 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
              SUM(CASE WHEN s.is_correct=1 THEN 1 ELSE 0 END) AS correct_count
       FROM daily_mcqs m
       LEFT JOIN daily_mcq_submissions s ON s.mcq_id = m.id
-      GROUP BY COALESCE(m.batch_title, m.title), m.class_scope
+      GROUP BY COALESCE(m.batch_title, m.title), m.class_scope, COALESCE(m.subject_scope, 'all')
       ORDER BY MAX(m.created_at) DESC
       LIMIT 20
     `).all();
 
-    const allStudents = db.prepare('SELECT id, name, email, class FROM students ORDER BY class, name').all();
+    const allStudents = db.prepare('SELECT id, name, email, class, subject FROM students ORDER BY class, name').all();
 
     const allSubmissionStats = db.prepare(`
       SELECT s.student_id,
              COALESCE(m.batch_title, m.title) AS batch_title,
-             m.class_scope, s.is_correct
+             m.class_scope, COALESCE(m.subject_scope, 'all') AS subject_scope, s.is_correct
       FROM daily_mcq_submissions s
       JOIN daily_mcqs m ON m.id = s.mcq_id
     `).all();
 
     const submissionMap = new Map();
     allSubmissionStats.forEach((row) => {
-      const key = `${row.batch_title}__${row.class_scope || 'all'}__${row.student_id}`;
+      const key = `${row.batch_title}__${row.class_scope || 'all'}__${row.subject_scope || 'all'}__${row.student_id}`;
       const current = submissionMap.get(key) || { attempted: 0, correct: 0 };
       current.attempted += 1;
       current.correct   += Number(row.is_correct) === 1 ? 1 : 0;
@@ -1305,13 +1321,20 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
 
     const mcqs = mcqRows.map((mcq) => {
       const classScope    = mcq.class_scope || 'all';
+      const subjectScope  = mcq.subject_scope || 'all';
       const questionCount = Number(mcq.question_count || 0);
       const eligibleStudents = classScope === 'all'
         ? allStudents
-        : allStudents.filter((s) => String(s.class || '') === String(classScope));
+        : allStudents.filter((s) => {
+            if (String(s.class || '') !== String(classScope)) return false;
+            if ((String(classScope) === '11' || String(classScope) === '12') && subjectScope !== 'all') {
+              return normalizeStudentSubject(s.subject, s.class) === subjectScope;
+            }
+            return true;
+          });
 
       const studentStats = eligibleStudents.map((student) => {
-        const statKey   = `${mcq.batch_title}__${classScope}__${student.id}`;
+        const statKey   = `${mcq.batch_title}__${classScope}__${subjectScope}__${student.id}`;
         const stat      = submissionMap.get(statKey) || { attempted: 0, correct: 0 };
         const attempted = Number(stat.attempted || 0);
         const correct   = Number(stat.correct   || 0);
@@ -1327,7 +1350,7 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
       });
 
       return {
-        ...mcq, question_count: questionCount, student_reports: studentStats,
+        ...mcq, question_count: questionCount, subject_scope: subjectScope, student_reports: studentStats,
         attempted_students:     studentStats.filter((s) => s.attemptedCount > 0).length,
         not_attempted_students: studentStats.filter((s) => s.attemptedCount === 0).length
       };
@@ -1341,12 +1364,15 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
 });
 
 app.post('/api/teacher/mcqs', authTeacher, (req, res) => {
-  const { title, classScope, questions } = req.body;
+  const { title, classScope, subjectScope, questions } = req.body;
   if (!Array.isArray(questions) || !questions.length || questions.length > 20)
     return res.status(400).json({ error: 'Please provide between 1 and 20 MCQs for the batch.' });
   const batchTitle    = (title || 'Daily MCQ Batch').trim() || 'Daily MCQ Batch';
+  const normalizedSubjectScope = (String(classScope) === '11' || String(classScope) === '12')
+    ? normalizeStudentSubject(subjectScope || 'maths', classScope)
+    : 'all';
   const availableUntil = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString();
-  const insert = db.prepare('INSERT INTO daily_mcqs (teacher_id, title, batch_title, question_no, question, question_image, options, correct_index, class_scope, available_until) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const insert = db.prepare('INSERT INTO daily_mcqs (teacher_id, title, batch_title, question_no, question, question_image, options, correct_index, class_scope, subject_scope, available_until) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   const transaction = db.transaction((items) => {
     items.forEach((item, index) => {
       const options      = Array.isArray(item.options) ? item.options.filter(Boolean) : [];
@@ -1357,7 +1383,7 @@ app.post('/api/teacher/mcqs', authTeacher, (req, res) => {
       const correctIndex = Number(item.correctIndex);
       if (correctIndex < 0 || correctIndex >= options.length)
         throw new Error('Each MCQ needs a valid correct option.');
-      insert.run(req.teacher.id, batchTitle, batchTitle, index + 1, questionText || null, questionImage || null, JSON.stringify(options), correctIndex, classScope || 'all', availableUntil);
+      insert.run(req.teacher.id, batchTitle, batchTitle, index + 1, questionText || null, questionImage || null, JSON.stringify(options), correctIndex, classScope || 'all', normalizedSubjectScope, availableUntil);
     });
   });
   try { transaction(questions); res.json({ success: true, batchTitle, availableUntil }); }
@@ -1370,9 +1396,12 @@ app.get('/api/teacher/question-papers', authTeacher, (req, res) => {
 });
 
 app.post('/api/teacher/question-papers', authTeacher, (req, res) => {
-  const { title, classScope, resourceType, resourceUrl } = req.body;
+  const { title, classScope, subjectScope, resourceType, resourceUrl } = req.body;
   if (!title || !resourceUrl) return res.status(400).json({ error: 'Title and document link/path are required.' });
-  const result = db.prepare('INSERT INTO question_papers (teacher_id, title, class_scope, resource_type, resource_url) VALUES (?,?,?,?,?)').run(req.teacher.id, title.trim(), classScope || 'all', resourceType || 'pdf', resourceUrl.trim());
+  const normalizedSubjectScope = (String(classScope) === '11' || String(classScope) === '12')
+    ? normalizeStudentSubject(subjectScope || 'maths', classScope)
+    : 'all';
+  const result = db.prepare('INSERT INTO question_papers (teacher_id, title, class_scope, subject_scope, resource_type, resource_url) VALUES (?,?,?,?,?,?)').run(req.teacher.id, title.trim(), classScope || 'all', normalizedSubjectScope, resourceType || 'pdf', resourceUrl.trim());
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
@@ -1578,6 +1607,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
