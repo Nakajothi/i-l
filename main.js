@@ -1196,6 +1196,17 @@ function regenerateTeacherMcqCards() {
   renderTeacherMcqCards(count);
 }
 
+function syncTeacherSubjectScope(selectId, rowId, subjectId) {
+  const classNode = document.getElementById(selectId);
+  const rowNode = document.getElementById(rowId);
+  const subjectNode = document.getElementById(subjectId);
+  if (!classNode || !rowNode || !subjectNode) return;
+  const needsSubject = classNode.value === '11' || classNode.value === '12';
+  rowNode.style.display = needsSubject ? '' : 'none';
+  if (!needsSubject) subjectNode.value = 'all';
+  else if (subjectNode.value === 'all') subjectNode.value = 'maths';
+}
+
 function showTeacherMcqMessage(message, isError) {
   const box = document.getElementById('teacherMcqMessage');
   if (!box) return;
@@ -1238,7 +1249,7 @@ function renderTeacherMcqList(mcqs) {
       <div style="padding:${index ? '16px 0 0' : '0'};margin-top:${index ? '16px' : '0'};border-top:${index ? '1px solid rgba(255,255,255,0.06)' : 'none'};">
         <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
           <div>
-            <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}</div>
+            <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}${mcq.subject_scope && mcq.subject_scope !== 'all' ? ' - ' + (mcq.subject_scope === 'business-maths' ? 'Business Maths' : 'Maths') : ''}</div>
             <div style="font-weight:700;line-height:1.5;">${mcq.question_count || 0} questions - ends ${mcq.available_until || 'in 24 hours'}</div>
           </div>
           <div style="min-width:220px;text-align:right;">
@@ -1269,6 +1280,7 @@ async function createTeacherMcq() {
   if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
   const title = (document.getElementById('teacherMcqTitle')?.value || '').trim() || 'Daily MCQ Batch';
   const classScope = (document.getElementById('teacherMcqClass')?.value || 'all').trim();
+  const subjectScope = (document.getElementById('teacherMcqSubject')?.value || 'all').trim();
   const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 10)));
   const questions = Array.from({ length: questionCount }, (_, index) => {
     const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
@@ -1282,7 +1294,7 @@ async function createTeacherMcq() {
     showTeacherMcqMessage('Each filled MCQ card must have question text or image, plus 4 options.', true); return;
   }
   try {
-    await API.createTeacherMcq({ title, classScope, questions });
+    await API.createTeacherMcq({ title, classScope, subjectScope, questions });
     const titleNode = document.getElementById('teacherMcqTitle');
     if (titleNode) titleNode.value = '';
     showTeacherMcqMessage(questions.length + ' question(s) posted successfully.', false);
@@ -1324,11 +1336,12 @@ async function loadTeacherQuestionPapers() {
 async function createTeacherQuestionPaper() {
   const title = (document.getElementById('teacherPaperTitle')?.value || '').trim();
   const classScope = (document.getElementById('teacherPaperClass')?.value || 'all').trim();
+  const subjectScope = (document.getElementById('teacherPaperSubject')?.value || 'all').trim();
   const resourceType = (document.getElementById('teacherPaperType')?.value || 'pdf').trim();
   const resourceUrl = (document.getElementById('teacherPaperUrl')?.value || '').trim();
   if (!title || !resourceUrl) { showTeacherPanelMessage('teacherPaperMessage', 'Please enter a title and the document URL/path.', true); return; }
   try {
-    await API.createTeacherQuestionPaper({ title, classScope, resourceType, resourceUrl });
+    await API.createTeacherQuestionPaper({ title, classScope, subjectScope, resourceType, resourceUrl });
     ['teacherPaperTitle', 'teacherPaperUrl'].forEach((id) => { const node = document.getElementById(id); if (node) node.value = ''; });
     showTeacherPanelMessage('teacherPaperMessage', 'Question paper added successfully.', false);
     await loadTeacherQuestionPapers();
