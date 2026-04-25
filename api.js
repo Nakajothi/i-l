@@ -53,8 +53,8 @@ const API = {
   delete(path, token)     { return this.request('DELETE', path, null, token); },
 
   // ── STUDENT ──────────────────────────────────────────
-  async registerStudent(name, cls, mobile, email, password, subject) {
-    const data = await this.post('/student/register', { name, class: cls, mobile, email, password, subject });
+  async registerStudent(name, cls, mobile, email, password, subject, board) {
+    const data = await this.post('/student/register', { name, class: cls, mobile, email, password, subject, board });
     localStorage.setItem('ilearn_token', data.token);
     localStorage.setItem('ilearn_student', JSON.stringify(data.student));
     localStorage.removeItem('ilearn_parent_token');
@@ -218,6 +218,7 @@ const API = {
     console.warn('[I LEARN API] Backend not reachable:', e.message);
   }
 })();
+
 
 
 
