@@ -1787,40 +1787,60 @@ async function renderDailyMcqs(role) {
 }
 
 // ── PAGE LOAD — FIXED teacher dashboard loading ───────────────────────────────
-window.addEventListener('load', async () => {
-  // Always render MCQ cards on load
-  renderTeacherMcqCards();
+let dashboardBootstrapPromise = null;
 
-  const role = getCurrentRole();
+async function bootstrapDashboard() {
+  if (dashboardBootstrapPromise) return dashboardBootstrapPromise;
 
-  // Apply session UI first
-  updateHomeForSession();
+  dashboardBootstrapPromise = (async () => {
+    renderTeacherMcqCards();
 
-  if (role === 'teacher') {
-    // Load all teacher data in parallel for speed
-    try {
-      await Promise.all([
-        loadTeacherAttendance(),
-        loadTeacherMcqs(),
-        loadTeacherDoubts()
-      ]);
-    } catch (e) {
-      console.warn('Teacher data load error:', e.message);
+    const role = getCurrentRole();
+    updateHomeForSession();
+
+    if (role === 'teacher') {
+      try {
+        await Promise.all([
+          loadTeacherAttendance(),
+          loadTeacherMcqs(),
+          loadTeacherDoubts()
+        ]);
+      } catch (e) {
+        console.warn('Teacher data load error:', e.message);
+      }
+      updateDashboardAttendanceCards();
+      renderNavProfile();
+    } else if (role === 'student') {
+      try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
+      try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
+      try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
+    } else if (role === 'parent') {
+      try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
+      try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
     }
-    updateDashboardAttendanceCards();
-    renderNavProfile();
+  })();
 
-  } else if (role === 'student') {
-    try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
-    try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
-    try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
-
-  } else if (role === 'parent') {
-    try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
-    try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
+  try {
+    await dashboardBootstrapPromise;
+  } finally {
+    dashboardBootstrapPromise = null;
   }
+}
+
+window.addEventListener('load', () => {
+  bootstrapDashboard().catch((e) => console.warn('Dashboard bootstrap failed:', e.message));
 });
 
+window.addEventListener('pageshow', () => {
+  bootstrapDashboard().catch((e) => console.warn('Dashboard restore failed:', e.message));
+});
+
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#teacher-dashboard' && hasActiveTeacherSession()) {
+    const teacherTab = document.getElementById('teacherDashTab');
+    if (teacherTab) switchTab('teacher', teacherTab);
+  }
+});
 
 
 
