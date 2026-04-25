@@ -778,6 +778,14 @@ async function refreshRoleData() {
       }
       if (message.includes('blocked by the teacher') || message.includes('Session expired')) {
         localStorage.removeItem('ilearn_student_profile');
+        localStorage.removeItem('ilearn_student_timetable');
+        localStorage.removeItem('ilearn_parent_profile');
+        localStorage.removeItem('ilearn_parent_student');
+        localStorage.removeItem('ilearn_token');
+        localStorage.removeItem('ilearn_student');
+        setTimeout(() => {
+          window.location.href = 'index.html';
+        }, 800);
       }
     }
     console.warn('Profile refresh skipped:', err.message || err);
@@ -1171,10 +1179,10 @@ function setDefaultTeacherDate() {
 
 let teacherStudentCache = [];
 
-function renderTeacherMcqCards(count = 10) {
+function renderTeacherMcqCards(count = 2) {
   const wrap = document.getElementById('teacherMcqCards');
   if (!wrap) return;
-  const safeCount = Math.max(1, Math.min(20, Number(count) || 10));
+  const safeCount = Math.max(1, Math.min(20, Number(count) || 2));
   const countInput = document.getElementById('teacherMcqCount');
   if (countInput) countInput.value = safeCount;
   wrap.innerHTML = Array.from({ length: safeCount }, (_, index) => `
@@ -1204,7 +1212,7 @@ function renderTeacherMcqCards(count = 10) {
 }
 
 function regenerateTeacherMcqCards() {
-  const count = document.getElementById('teacherMcqCount')?.value || 10;
+  const count = document.getElementById('teacherMcqCount')?.value || 2;
   renderTeacherMcqCards(count);
 }
 
@@ -1333,7 +1341,7 @@ async function createTeacherMcq() {
   const classScope = (document.getElementById('teacherMcqClass')?.value || 'all').trim();
   const subjectScope = (document.getElementById('teacherMcqSubject')?.value || 'all').trim();
   const boardScope = (document.getElementById('teacherMcqBoard')?.value || 'all').trim();
-  const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 10)));
+  const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 2)));
   const questions = Array.from({ length: questionCount }, (_, index) => {
     const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
     const imageUrl = (document.getElementById(`teacherMcqQuestionImage${index + 1}`)?.value || '').trim();
