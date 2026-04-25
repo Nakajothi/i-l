@@ -725,6 +725,14 @@ section{padding:56px 14px;}
               <option value="12">Class 12</option>
             </select>
           </div>
+          <div class="form-group" style="margin:0;">
+            <label>Board</label>
+            <select id="teacherMcqBoard">
+              <option value="all">All Boards</option>
+              <option value="state">State Board</option>
+              <option value="cbse">CBSE</option>
+            </select>
+          </div>
           <div class="form-group" style="margin:0;display:none;" id="teacherMcqSubjectRow">
             <label>Subject</label>
             <select id="teacherMcqSubject">
@@ -762,6 +770,14 @@ section{padding:56px 14px;}
             <label>Class Scope</label>
             <select id="teacherPaperClass" onchange="syncTeacherSubjectScope('teacherPaperClass','teacherPaperSubjectRow','teacherPaperSubject')"><option value="9">Class 9</option><option value="10">Class 10</option><option value="11">Class 11</option><option value="12">Class 12</option><option value="all">All Classes</option></select>
           </div>
+          <div class="form-group" style="margin:0;">
+            <label>Board</label>
+            <select id="teacherPaperBoard">
+              <option value="all">All Boards</option>
+              <option value="state">State Board</option>
+              <option value="cbse">CBSE</option>
+            </select>
+          </div>
           <div class="form-group" style="margin:0;display:none;" id="teacherPaperSubjectRow">
             <label>Subject</label>
             <select id="teacherPaperSubject">
@@ -776,7 +792,8 @@ section{padding:56px 14px;}
         </div>
         <div class="form-group" style="margin-top:14px;">
           <label>Document URL / Path</label>
-          <input type="text" id="teacherPaperUrl" placeholder="Paste the file URL or document path" />
+          <input type="text" id="teacherPaperUrl" data-preview-id="teacherPaperUrlPreview" placeholder="Paste file URL/path or press Ctrl+V to paste image" onpaste="handleTeacherImagePaste(event, this)" oninput="updateTeacherImagePreview(this)" />
+          <div id="teacherPaperUrlPreview" style="display:none;margin-top:10px;"></div>
         </div>
         <button class="btn-primary" onclick="createTeacherQuestionPaper()">Add Question Paper</button>
         <div id="teacherPaperMessage" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(77,158,255,0.25);color:#E8E8F5;"></div>
@@ -1006,6 +1023,9 @@ section{padding:56px 14px;}
         <div class="form-group"><label>Student Name</label><input type="text" id="regName" placeholder="Full name"/></div>
         <div class="form-group"><label>Class</label><select id="regClass"><option value="">Select class</option><option value="9">Class 9</option><option value="10">Class 10</option><option value="11">Class 11</option><option value="12">Class 12</option></select></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label>Board</label><select id="regBoard"><option value="">Select board</option><option value="state">State Board</option><option value="cbse">CBSE</option></select></div>
+      </div>
       <div class="form-row" id="regSubjectRow" style="display:none;">
         <div class="form-group"><label>Subject</label><select id="regSubject"><option value="">Select subject</option><option value="maths">Maths</option><option value="business-maths">Business Maths</option></select></div>
       </div>
@@ -1057,14 +1077,15 @@ section{padding:56px 14px;}
     <button class="modal-close" onclick="closeDoubtModal()">&times;</button>
     <div class="modal-icon">&#127775;</div>
     <h2>Ask a Doubt</h2>
-    <p>Click the icon any time, ask your question here, and optionally add an image link.</p>
+    <p>Click the icon any time, ask your question here, and optionally paste an image.</p>
     <div class="form-group" style="margin-top:10px;">
       <label>Your Question</label>
       <textarea id="doubtQuestionText" rows="4" placeholder="Type your doubt here..."></textarea>
     </div>
     <div class="form-group" style="margin-top:12px;">
-      <label>Image URL (optional)</label>
-      <input type="text" id="doubtQuestionImage" placeholder="Paste image link" />
+      <label>Image (optional)</label>
+      <input type="text" id="doubtQuestionImage" data-preview-id="doubtQuestionImagePreview" placeholder="Paste image URL/path or press Ctrl+V to paste image" onpaste="handleTeacherImagePaste(event, this)" oninput="updateTeacherImagePreview(this)" />
+      <div id="doubtQuestionImagePreview" style="display:none;margin-top:10px;"></div>
     </div>
     <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="submitStudentDoubt()">Submit Doubt</button>
     <div id="doubtSubmitMessage" class="otp-error" style="margin-top:12px;"></div>
