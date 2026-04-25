@@ -1320,7 +1320,12 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
       LIMIT 20
     `).all();
 
-    const allStudents = db.prepare('SELECT id, name, email, class, subject, board FROM students ORDER BY class, name').all();
+    const allStudents = db.prepare(`
+      SELECT id, name, email, class, subject, board
+      FROM students
+      WHERE COALESCE(approval_status, 'accepted') <> 'rejected'
+      ORDER BY class, name
+    `).all();
 
     const allSubmissionStats = db.prepare(`
       SELECT s.student_id,
@@ -1446,6 +1451,7 @@ app.get('/api/teacher/weekly-tests', authTeacher, (req, res) => {
     SELECT wt.title, wt.test_date, s.name AS student_name, s.class,
            wt.marks_obtained, wt.total_marks, wt.notes
     FROM weekly_tests wt JOIN students s ON s.id = wt.student_id
+    WHERE COALESCE(s.approval_status, 'accepted') <> 'rejected'
     ORDER BY wt.test_date DESC, wt.created_at DESC LIMIT 50
   `).all();
   res.json({ tests });
@@ -1456,11 +1462,14 @@ app.post('/api/teacher/weekly-tests', authTeacher, (req, res) => {
   if (!title || !testDate || !Array.isArray(entries))
     return res.status(400).json({ error: 'Title, test date, and student entries are required.' });
   const insert = db.prepare('INSERT INTO weekly_tests (teacher_id, student_id, title, test_date, marks_obtained, total_marks, notes) VALUES (?,?,?,?,?,?,?)');
+  const activeStudentIds = new Set(
+    db.prepare("SELECT id FROM students WHERE COALESCE(approval_status, 'accepted') <> 'rejected'").all().map((row) => Number(row.id))
+  );
   const transaction = db.transaction((rows) => {
     rows.forEach((row) => {
       const studentId = Number(row.studentId);
       const marks     = row.marksObtained;
-      if (!studentId || marks === '' || marks === null || marks === undefined) return;
+      if (!studentId || !activeStudentIds.has(studentId) || marks === '' || marks === null || marks === undefined) return;
       insert.run(req.teacher.id, studentId, title.trim(), testDate, Number(marks) || 0, Number(totalMarks) || 100, (row.notes || '').trim());
     });
   });
@@ -1473,11 +1482,14 @@ app.post('/api/teacher/fees', authTeacher, (req, res) => {
   if (!paidOn || !Array.isArray(entries))
     return res.status(400).json({ error: 'Payment date and student fee entries are required.' });
   const insert = db.prepare('INSERT INTO fee_payments (teacher_id, student_id, amount_paid, paid_on) VALUES (?,?,?,?)');
+  const activeStudentIds = new Set(
+    db.prepare("SELECT id FROM students WHERE COALESCE(approval_status, 'accepted') <> 'rejected'").all().map((row) => Number(row.id))
+  );
   const transaction = db.transaction((rows) => {
     rows.forEach((row) => {
       const studentId = Number(row.studentId);
       const amountPaid = Number(row.amountPaid);
-      if (!studentId || !amountPaid) return;
+      if (!studentId || !activeStudentIds.has(studentId) || !amountPaid) return;
       insert.run(req.teacher.id, studentId, amountPaid, paidOn);
     });
   });
@@ -1509,12 +1521,17 @@ app.post('/api/teacher/attendance', authTeacher, (req, res) => {
     'INSERT INTO attendance (student_id, date, status) VALUES (?,?,?) ON CONFLICT (student_id, date) DO UPDATE SET status = EXCLUDED.status'
   );
   const updateApproval = db.prepare('UPDATE students SET approval_status=? WHERE id=?');
+  const activeStudentIds = new Set(
+    db.prepare("SELECT id FROM students WHERE COALESCE(approval_status, 'accepted') <> 'rejected'").all().map((row) => Number(row.id))
+  );
   const transaction = db.transaction((rows) => {
     for (const row of rows) {
       const studentId      = Number(row.studentId);
       const status         = String(row.status         || '').toLowerCase();
       const approvalStatus = String(row.approvalStatus || 'accepted').toLowerCase();
       if (!studentId || !['present','absent'].includes(status)) continue;
+      const isRejectingNow = approvalStatus === 'rejected';
+      if (!activeStudentIds.has(studentId) && !isRejectingNow) continue;
       upsert.run(studentId, date, status);
       if (['accepted','rejected'].includes(approvalStatus)) updateApproval.run(approvalStatus, studentId);
     }
@@ -1636,7 +1653,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
