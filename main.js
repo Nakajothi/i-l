@@ -1178,17 +1178,8 @@ function setDefaultTeacherDate() {
 }
 
 let teacherStudentCache = [];
-let teacherMcqGenerationContext = null;
 
-function normalizeTeacherMcqOption(option) {
-  if (typeof option === 'string') return { text: option, imageUrl: '' };
-  return {
-    text: String(option?.text || '').trim(),
-    imageUrl: String(option?.imageUrl || '').trim()
-  };
-}
-
-function renderTeacherMcqCards(count = 2, presetQuestions = []) {
+function renderTeacherMcqCards(count = 2) {
   const wrap = document.getElementById('teacherMcqCards');
   if (!wrap) return;
   const safeCount = Math.max(1, Math.min(20, Number(count) || 2));
@@ -1196,10 +1187,7 @@ function renderTeacherMcqCards(count = 2, presetQuestions = []) {
   if (countInput) countInput.value = safeCount;
   wrap.innerHTML = Array.from({ length: safeCount }, (_, index) => `
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:18px;padding:16px;">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
-        <div style="font-size:0.78rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">Question ${index + 1}</div>
-        <button type="button" class="btn-outline-sm" onclick="regenerateTeacherMcqQuestion(${index + 1})">Regenerate</button>
-      </div>
+      <div style="font-size:0.78rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Question ${index + 1}</div>
       <div class="form-group" style="margin:0 0 10px 0;"><label>Question Text</label><textarea id="teacherMcqQuestion${index + 1}" rows="3" placeholder="Enter question ${index + 1}"></textarea></div>
       <div class="form-group" style="margin:0 0 10px 0;">
         <label>Question Image</label>
@@ -1221,113 +1209,11 @@ function renderTeacherMcqCards(count = 2, presetQuestions = []) {
       </div>
     </div>
   `).join('');
-
-  presetQuestions.slice(0, safeCount).forEach((question, index) => {
-    fillTeacherMcqCard(index + 1, question);
-  });
 }
 
 function regenerateTeacherMcqCards() {
   const count = document.getElementById('teacherMcqCount')?.value || 2;
-  teacherMcqGenerationContext = null;
   renderTeacherMcqCards(count);
-}
-
-function fillTeacherMcqCard(cardNumber, questionData) {
-  const normalizedOptions = Array.isArray(questionData?.options)
-    ? questionData.options.map(normalizeTeacherMcqOption)
-    : [];
-  const questionNode = document.getElementById(`teacherMcqQuestion${cardNumber}`);
-  const questionImageNode = document.getElementById(`teacherMcqQuestionImage${cardNumber}`);
-  const correctNode = document.getElementById(`teacherMcq${cardNumber}Correct`);
-  if (questionNode) questionNode.value = String(questionData?.question || '').trim();
-  if (questionImageNode) {
-    questionImageNode.value = String(questionData?.imageUrl || '').trim();
-    updateTeacherImagePreview(questionImageNode);
-  }
-  [1, 2, 3, 4].forEach((optionNumber) => {
-    const option = normalizedOptions[optionNumber - 1] || { text: '', imageUrl: '' };
-    const textNode = document.getElementById(`teacherMcq${cardNumber}Option${optionNumber}`);
-    const imageNode = document.getElementById(`teacherMcq${cardNumber}Option${optionNumber}Image`);
-    if (textNode) textNode.value = option.text;
-    if (imageNode) {
-      imageNode.value = option.imageUrl;
-      updateTeacherImagePreview(imageNode);
-    }
-  });
-  if (correctNode) correctNode.value = String(Math.max(0, Math.min(3, Number(questionData?.correctIndex || 0))));
-}
-
-function collectTeacherMcqQuestions() {
-  const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 2)));
-  return Array.from({ length: questionCount }, (_, index) => {
-    const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
-    const imageUrl = (document.getElementById(`teacherMcqQuestionImage${index + 1}`)?.value || '').trim();
-    const options = [1, 2, 3, 4].map((optionIndex) => ({
-      text: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}`)?.value || '').trim(),
-      imageUrl: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}Image`)?.value || '').trim()
-    }));
-    const correctIndex = Number(document.getElementById(`teacherMcq${index + 1}Correct`)?.value || 0);
-    return { question, imageUrl, options, correctIndex };
-  });
-}
-
-function getTeacherMcqGenerationConfig() {
-  const classScope = (document.getElementById('teacherMcqClass')?.value || 'all').trim();
-  const subjectScope = (document.getElementById('teacherMcqSubject')?.value || 'all').trim();
-  const boardScope = (document.getElementById('teacherMcqBoard')?.value || 'all').trim();
-  const topic = (document.getElementById('teacherMcqTopic')?.value || '').trim();
-  const difficulty = (document.getElementById('teacherMcqDifficulty')?.value || 'medium').trim();
-  const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 2)));
-  return { classScope, subjectScope, boardScope, topic, difficulty, questionCount };
-}
-
-async function generateTeacherMcqsWithAi() {
-  if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
-  const title = (document.getElementById('teacherMcqTitle')?.value || '').trim() || 'Daily MCQ Batch';
-  const config = getTeacherMcqGenerationConfig();
-  if (!config.topic) {
-    showTeacherMcqMessage('Please enter a topic before generating MCQs.', true);
-    document.getElementById('teacherMcqTopic')?.focus();
-    return;
-  }
-  if ((config.classScope === '11' || config.classScope === '12') && !config.subjectScope) {
-    showTeacherMcqMessage('Please choose Maths or Business Maths for Class 11/12.', true);
-    return;
-  }
-  showTeacherMcqMessage('Generating MCQs with AI...', false);
-  try {
-    const data = await API.generateTeacherMcqs({ title, ...config });
-    const questions = Array.isArray(data.questions) ? data.questions : [];
-    teacherMcqGenerationContext = { title, ...config };
-    renderTeacherMcqCards(config.questionCount, questions);
-    showTeacherMcqMessage(`${questions.length} AI-generated question(s) are ready. Review them and click Post MCQ Batch when satisfied.`, false);
-  } catch (err) {
-    showTeacherMcqMessage(err.message || 'Could not generate MCQs.', true);
-  }
-}
-
-async function regenerateTeacherMcqQuestion(cardNumber) {
-  if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
-  const config = teacherMcqGenerationContext || getTeacherMcqGenerationConfig();
-  if (!config.topic) {
-    showTeacherMcqMessage('Please enter a topic and generate the batch first.', true);
-    return;
-  }
-  const currentQuestions = collectTeacherMcqQuestions();
-  showTeacherMcqMessage(`Regenerating question ${cardNumber}...`, false);
-  try {
-    const data = await API.regenerateTeacherMcq({
-      ...config,
-      questionIndex: cardNumber - 1,
-      questions: currentQuestions
-    });
-    fillTeacherMcqCard(cardNumber, data.question || {});
-    teacherMcqGenerationContext = { ...config };
-    showTeacherMcqMessage(`Question ${cardNumber} regenerated.`, false);
-  } catch (err) {
-    showTeacherMcqMessage(err.message || 'Could not regenerate this question.', true);
-  }
 }
 
 function isLikelyImageValue(value) {
@@ -1456,7 +1342,16 @@ async function createTeacherMcq() {
   const subjectScope = (document.getElementById('teacherMcqSubject')?.value || 'all').trim();
   const boardScope = (document.getElementById('teacherMcqBoard')?.value || 'all').trim();
   const questionCount = Math.max(1, Math.min(20, Number(document.getElementById('teacherMcqCount')?.value || 2)));
-  const questions = collectTeacherMcqQuestions().filter((item) => item.question || item.imageUrl || item.options.some((option) => option.text || option.imageUrl));
+  const questions = Array.from({ length: questionCount }, (_, index) => {
+    const question = (document.getElementById(`teacherMcqQuestion${index + 1}`)?.value || '').trim();
+    const imageUrl = (document.getElementById(`teacherMcqQuestionImage${index + 1}`)?.value || '').trim();
+    const options = [1, 2, 3, 4].map((optionIndex) => ({
+      text: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}`)?.value || '').trim(),
+      imageUrl: (document.getElementById(`teacherMcq${index + 1}Option${optionIndex}Image`)?.value || '').trim()
+    }));
+    const correctIndex = Number(document.getElementById(`teacherMcq${index + 1}Correct`)?.value || 0);
+    return { question, imageUrl, options, correctIndex };
+  }).filter((item) => item.question || item.imageUrl || item.options.some((option) => option.text || option.imageUrl));
   if (!questions.length) { showTeacherMcqMessage('Add at least one MCQ card before posting.', true); return; }
   if (questions.some((item) => (!item.question && !item.imageUrl) || item.options.some((option) => !option.text && !option.imageUrl))) {
     showTeacherMcqMessage('Each filled MCQ card must have question text or image, plus 4 options with text or image.', true); return;
@@ -1465,11 +1360,6 @@ async function createTeacherMcq() {
     await API.createTeacherMcq({ title, classScope, subjectScope, boardScope, questions });
     const titleNode = document.getElementById('teacherMcqTitle');
     if (titleNode) titleNode.value = '';
-    const topicNode = document.getElementById('teacherMcqTopic');
-    if (topicNode) topicNode.value = '';
-    const difficultyNode = document.getElementById('teacherMcqDifficulty');
-    if (difficultyNode) difficultyNode.value = 'medium';
-    teacherMcqGenerationContext = null;
     showTeacherMcqMessage(questions.length + ' question(s) posted successfully.', false);
     renderTeacherMcqCards(questionCount);
     await loadTeacherMcqs();
