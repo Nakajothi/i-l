@@ -165,11 +165,49 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
     };
   });
 }
+function getBuiltInQuestionPapers(studentClass, studentSubject, studentBoard) {
+  const safeClass = String(studentClass || '').trim();
+  const safeSubject = normalizeStudentSubject(studentSubject, safeClass);
+  const safeBoard = normalizeBoardScope(studentBoard);
+  if (safeClass !== '12' || safeSubject !== 'maths' || safeBoard !== 'state') return [];
+  return [
+    {
+      id: 'builtin-class12-paper-1',
+      title: 'Class 12 Maths Book Back 1-Mark Questions',
+      class_scope: '12',
+      subject_scope: 'maths',
+      board_scope: 'state',
+      resource_type: 'pdf',
+      resource_url: '/papers/class12/namma_kalvi_12th_maths_book_back_1_mark_questions_em_217083.pdf',
+      posted_at: '2026-04-29T00:00:00.000Z'
+    },
+    {
+      id: 'builtin-class12-paper-2',
+      title: 'Class 12 Maths Volume 1 Book Back 1-Mark Questions',
+      class_scope: '12',
+      subject_scope: 'maths',
+      board_scope: 'state',
+      resource_type: 'pdf',
+      resource_url: '/papers/class12/namma_kalvi_12th_maths_volume_1_book_back_1_mark_questions_em_214824.pdf',
+      posted_at: '2026-04-29T00:00:01.000Z'
+    },
+    {
+      id: 'builtin-class12-paper-3',
+      title: 'Class 12 Maths Book Back and Creative Questions',
+      class_scope: '12',
+      subject_scope: 'maths',
+      board_scope: 'state',
+      resource_type: 'pdf',
+      resource_url: '/papers/class12/namma_kalvi_12th_maths_book_back_and_creative_questions_em_219383.pdf',
+      posted_at: '2026-04-29T00:00:02.000Z'
+    }
+  ];
+}
 function getStudentQuestionPapers(studentClass, studentSubject, studentBoard) {
   const safeClass = String(studentClass || '').trim();
   const safeSubject = normalizeStudentSubject(studentSubject, safeClass);
   const safeBoard = normalizeBoardScope(studentBoard);
-  return db.prepare(`
+  const dbPapers = db.prepare(`
     SELECT id, title, class_scope, COALESCE(subject_scope, 'all') AS subject_scope, COALESCE(board_scope, 'all') AS board_scope, resource_type, resource_url, posted_at
     FROM question_papers
     WHERE (class_scope=? OR class_scope='all')
@@ -178,6 +216,7 @@ function getStudentQuestionPapers(studentClass, studentSubject, studentBoard) {
     ORDER BY posted_at DESC
     LIMIT 10
   `).all(safeClass, safeSubject, safeBoard);
+  return [...getBuiltInQuestionPapers(safeClass, safeSubject, safeBoard), ...dbPapers];
 }
 function getStudentMcqStreak(studentId) {
   const rows = db.prepare("SELECT DISTINCT DATE(submitted_at) as day FROM daily_mcq_submissions WHERE student_id=? ORDER BY day DESC").all(studentId);
@@ -1653,6 +1692,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
