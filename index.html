@@ -744,13 +744,27 @@ section{padding:56px 14px;}
             <label>No. of Questions</label>
             <input type="number" id="teacherMcqCount" min="1" max="20" value="2" />
           </div>
+          <div class="form-group" style="margin:0;">
+            <label>Topic</label>
+            <input type="text" id="teacherMcqTopic" placeholder="Quadratic Equations" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Difficulty</label>
+            <select id="teacherMcqDifficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
         </div>
         <div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:rgba(77,158,255,0.08);border:1px solid rgba(77,158,255,0.18);color:var(--muted);font-size:0.88rem;line-height:1.6;">
-          Choose how many MCQs you want to set, generate the cards below, and then post the batch. Student-wise completion and score reports will be visible here after they attempt it.
+          Choose class, board, topic, difficulty, and question count. AI will draft the MCQs below, you can regenerate any one question, edit it if needed, and then post the final batch.
         </div>
         <div id="teacherMcqCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px;"></div>
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px;">
-          <button class="btn-secondary" onclick="regenerateTeacherMcqCards()">Generate Question Cards</button>
+          <button class="btn-secondary" onclick="generateTeacherMcqsWithAi()">Generate with AI</button>
+          <button class="btn-secondary" onclick="regenerateTeacherMcqCards()">Reset Cards</button>
           <button class="btn-primary" onclick="createTeacherMcq()">Post MCQ Batch</button>
         </div>
         <div id="teacherMcqMessage" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(0,229,160,0.25);color:#E8E8F5;"></div>
