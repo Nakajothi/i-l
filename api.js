@@ -180,10 +180,8 @@ const API = {
   submitStudentDailyMcq(mcqId, idx) { return this.post('/student/daily-mcqs/' + mcqId + '/submit', { selectedIndex: idx }, this.token()); },
 
   // ── TEACHER MCQ ──────────────────────────────────────
-  getTeacherMcqs()              { return this.get('/teacher/mcqs', this.teacherToken()); },
-  generateTeacherMcqs(payload) { return this.post('/teacher/mcqs/generate', payload, this.teacherToken()); },
-  regenerateTeacherMcq(payload) { return this.post('/teacher/mcqs/regenerate', payload, this.teacherToken()); },
-  createTeacherMcq(payload)     { return this.post('/teacher/mcqs', payload, this.teacherToken()); },
+  getTeacherMcqs()           { return this.get('/teacher/mcqs', this.teacherToken()); },
+  createTeacherMcq(payload)  { return this.post('/teacher/mcqs', payload, this.teacherToken()); },
 
   // ── TEACHER PAPERS ───────────────────────────────────
   getTeacherQuestionPapers()           { return this.get('/teacher/question-papers', this.teacherToken()); },
