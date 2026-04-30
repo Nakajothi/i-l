@@ -1378,7 +1378,8 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
     const starterMode = !latestAssessment;
     let focusTopic = requestedTopic;
     const boardInfo = getBoardMathTopics(student.class || req.student.class, student.board || 'state', student.subject || req.student.subject);
-    const starterTopics = (boardInfo.topics || []).slice(0, Math.max(QUESTIONS_PER_TEST || 5, 5));
+    const starterQuestionCount = 5;
+    const starterTopics = (boardInfo.topics || []).slice(0, starterQuestionCount);
 
     if (!starterMode && !focusTopic) {
       const rankedWeakTopics = Object.entries(topicScores)
@@ -1398,7 +1399,7 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
       boardScope: student.board || 'state',
       topic: focusTopic,
       focusTopics: starterMode ? starterTopics : [],
-      questionCount: 5,
+      questionCount: starterQuestionCount,
       previousQuestions,
       starterMode
     });
@@ -1998,7 +1999,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
