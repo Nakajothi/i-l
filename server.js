@@ -461,6 +461,89 @@ async function callGeminiForMcqs(payload) {
   }
   throw new Error(errors.join(' | ') || 'Could not generate MCQs with Gemini.');
 }
+function buildWeakTopicMcqPrompt({ classScope, boardScope, subjectScope, topic, questionCount, previousQuestions = [] }) {
+  const cls = String(classScope || '').trim() || 'all';
+  const board = cls === 'all' ? 'all boards' : (normalizeBoardScope(boardScope || 'state') === 'cbse' ? 'CBSE' : 'State Board');
+  const subject = (cls === '11' || cls === '12')
+    ? getSubjectDisplayName(subjectScope || 'maths', cls)
+    : 'Maths';
+  const avoidList = previousQuestions
+    .map((item) => String(item?.question || '').trim())
+    .filter(Boolean)
+    .map((question, index) => `${index + 1}. ${question}`)
+    .join('\n');
+  return `
+You are creating a weak-topic remedial MCQ test for a student.
+
+Target class: ${cls === 'all' ? 'Mixed classes' : `Class ${cls}`}
+Board: ${board}
+Subject: ${subject}
+Weak topic to focus on: ${topic}
+
+Return ONLY valid JSON.
+Return a JSON array with exactly ${questionCount} question objects.
+
+Each question object must have:
+- question: string
+- imageUrl: string (keep empty unless truly needed)
+- options: array of exactly 4 objects with text and imageUrl
+- correctIndex: 0, 1, 2, or 3
+- explanation: short one-line explanation
+
+Rules:
+- Keep all questions strictly inside the weak topic: ${topic}.
+- Make them one-mark / quick-practice level.
+- Keep the language clear and student-friendly.
+- Avoid duplicate questions.
+- Prefer text-only questions unless an image is truly necessary.
+- Do not include markdown or any extra text outside JSON.
+
+${avoidList ? `Do not repeat these previous questions:\n${avoidList}\n` : ''}
+`.trim();
+}
+async function callGeminiForWeakTopicTest(payload) {
+  const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('Gemini API key is not configured on the server yet.');
+  const models = [...new Set(getGeminiModelSequence())];
+  const errors = [];
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: buildWeakTopicMcqPrompt(payload) }] }],
+          generationConfig: {
+            temperature: 0.8,
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        errors.push(`${model}: ${data?.error?.message || 'Gemini request failed.'}`);
+        continue;
+      }
+      const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('') || '';
+      const jsonBlock = extractJsonBlock(text);
+      if (!jsonBlock) {
+        errors.push(`${model}: Gemini returned an empty response.`);
+        continue;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonBlock);
+      } catch {
+        errors.push(`${model}: Gemini returned invalid JSON.`);
+        continue;
+      }
+      return { modelUsed: model, parsed };
+    } catch (error) {
+      errors.push(`${model}: ${error.message || 'Unknown Gemini error.'}`);
+    }
+  }
+  throw new Error(errors.join(' | ') || 'Could not generate weak-topic MCQs with Gemini.');
+}
 function trySolveQuadraticFromText(message) {
   const compact = String(message || '').replace(/\s+/g, '').toLowerCase();
   const match   = compact.match(/([+-]?\d*)x\^2([+-]\d*)x([+-]\d+)=0/);
@@ -1280,6 +1363,67 @@ app.post('/api/assessment/submit', authStudent, (req, res) => {
 app.get('/api/assessment/history', authStudent, (req, res) => {
   const history = db.prepare('SELECT id, class, score, total, topic_scores, weak_topics, strong_topics, taken_at FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 10').all(req.student.id);
   res.json({ history });
+});
+
+app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
+  try {
+    const student = db.prepare('SELECT id, class, subject, board FROM students WHERE id=?').get(req.student.id);
+    if (!student) return res.status(404).json({ error: 'Student not found.' });
+
+    const latestAssessment = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1').get(req.student.id);
+    if (!latestAssessment) {
+      return res.status(400).json({ error: 'Please complete your diagnostic test first.' });
+    }
+
+    const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
+    const weakTopics = latestAssessment?.weak_topics ? JSON.parse(latestAssessment.weak_topics || '[]') : [];
+    const requestedTopic = String(req.body?.focusTopic || '').trim();
+    const previousQuestions = Array.isArray(req.body?.previousQuestions) ? req.body.previousQuestions : [];
+    let focusTopic = requestedTopic;
+
+    if (!focusTopic) {
+      const rankedWeakTopics = Object.entries(topicScores)
+        .sort((a, b) => Number(a[1] || 0) - Number(b[1] || 0))
+        .map(([topic]) => topic)
+        .filter((topic) => !weakTopics.length || weakTopics.includes(topic));
+      focusTopic = rankedWeakTopics[0] || weakTopics[0] || '';
+    }
+
+    if (!focusTopic) {
+      return res.json({
+        success: true,
+        ready: false,
+        message: 'No weak topics detected right now. Great work on your diagnostic test.'
+      });
+    }
+
+    const result = await callGeminiForWeakTopicTest({
+      classScope: student.class || req.student.class,
+      subjectScope: student.subject || req.student.subject,
+      boardScope: student.board || 'state',
+      topic: focusTopic,
+      questionCount: 5,
+      previousQuestions
+    });
+
+    const generated = result.parsed;
+    const questions = Array.isArray(generated) ? generated : (Array.isArray(generated?.questions) ? generated.questions : []);
+    if (questions.length !== 5) {
+      return res.status(502).json({ error: `Gemini returned ${questions.length || 0} questions instead of 5. Please try again.` });
+    }
+
+    res.json({
+      success: true,
+      ready: true,
+      modelUsed: result.modelUsed,
+      focusTopic,
+      weakTopics,
+      topicScores,
+      questions: questions.map((item, index) => sanitizeGeneratedMcq(item, index))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not generate weak-topic test.' });
+  }
 });
 
 // ============================================================
