@@ -79,6 +79,8 @@ let answers = {};
 let currentStudent = null;
 let currentFocusTopic = '';
 let previousGeneratedQuestions = [];
+let starterMode = false;
+let suggestedTopics = [];
 
 function getCurrentStudent() {
   try {
@@ -101,16 +103,6 @@ function renderLoginRequired() {
     '<h1>Login Required</h1>',
     '<p class="sub">Please log in as a student first so we can load your weak-topic practice test.</p>',
     '<button class="btn-primary" onclick="window.location.href=\'index.html\'">Go to Home</button>',
-    '</div>'
-  ].join('');
-}
-
-function renderAssessmentRequired(message) {
-  document.getElementById('mainContent').innerHTML = [
-    '<div class="test-card fade-in">',
-    '<h1>Diagnostic Test Needed</h1>',
-    '<p class="sub">' + (message || 'Please complete your diagnostic test first so we can identify your weak topics.') + '</p>',
-    '<button class="btn-primary" onclick="window.location.href=\'index.html#assessment\'">Take Diagnostic Test</button>',
     '</div>'
   ].join('');
 }
@@ -140,20 +132,19 @@ async function buildQuiz() {
       focusTopic: currentFocusTopic || undefined,
       previousQuestions: previousGeneratedQuestions
     });
-    if (!data.ready) {
-      renderAssessmentRequired(data.message || 'No weak topics detected right now.');
-      return;
-    }
+    if (!data.ready) return;
+    starterMode = !!data.starterMode;
+    suggestedTopics = Array.isArray(data.suggestedTopics) ? data.suggestedTopics : [];
     currentFocusTopic = data.focusTopic || '';
     allQuestions = (data.questions || []).map((question, index) => normalizeAiQuestion({
       ...question,
-      topic: data.focusTopic || question.topic
+      topic: question.topic || data.focusTopic || suggestedTopics[index] || 'Weak Topic'
     }, index));
     previousGeneratedQuestions = allQuestions.map((question) => ({ question: question.q }));
     answers = {};
     renderQuiz(data.modelUsed || '');
   } catch (err) {
-    renderAssessmentRequired(err.message || 'Could not load your weak-topic test right now.');
+    document.getElementById('mainContent').innerHTML = '<div class="test-card fade-in"><h1>Could Not Load Test</h1><p class="sub">' + (err.message || 'Could not load your weak-topic test right now.') + '</p><button class="btn-primary" onclick="buildQuiz()">Try Again</button></div>';
   }
 }
 
@@ -162,10 +153,14 @@ function renderQuiz(modelUsed) {
   const answered = Object.keys(answers).length;
   const pct = Math.round(answered / total * 100);
   let html = '<h1>Weak Topic Practice Test</h1>';
-  html += '<p class="sub">AI has created 5 follow-up questions for your weak area: <strong>' + (currentFocusTopic || 'Weak Topic') + '</strong>.' + (modelUsed ? ' Generated using ' + modelUsed + '.' : '') + '</p>';
+  html += '<p class="sub">' + (
+    starterMode
+      ? 'AI has created a 5-question starter test across different topics to understand where you need help most.'
+      : 'AI has created 5 follow-up questions for your weak area: <strong>' + (currentFocusTopic || 'Weak Topic') + '</strong>.'
+  ) + (modelUsed ? ' Generated using ' + modelUsed + '.' : '') + '</p>';
   html += '<div class="progress-top"><span>' + answered + ' of ' + total + ' answered</span><span id="pct">' + pct + '%</span></div>';
   html += '<div class="prog-bar"><div class="prog-fill" id="progFill" style="width:' + pct + '%"></div></div>';
-  html += '<div class="test-card"><h3>' + (currentFocusTopic || 'Weak Topic Practice') + '</h3><p>Answer all 5 questions to strengthen this topic.</p>';
+  html += '<div class="test-card"><h3>' + (starterMode ? 'Starter Topic Check' : (currentFocusTopic || 'Weak Topic Practice')) + '</h3><p>' + (starterMode ? 'Answer these 5 questions from different topics so AI can detect where to focus next.' : 'Answer all 5 questions to strengthen this topic.') + '</p>';
   allQuestions.forEach((q) => {
     const sel = answers[q.id];
     html += '<div class="q-block"><div class="q-text">' + q.q + '</div><div class="q-options">';
@@ -227,7 +222,9 @@ function buildResultSummary(topicScoreMap, focusTopic) {
     };
   });
   return {
-    overall: 'This 5-question AI practice test focused on ' + (focusTopic || 'your weakest area') + '.',
+    overall: starterMode
+      ? 'This 5-question AI starter test checked multiple topics to find where you need more help.'
+      : 'This 5-question AI practice test focused on ' + (focusTopic || 'your weakest area') + '.',
     topics
   };
 }
@@ -236,7 +233,7 @@ function renderResults(result, correct, total) {
   const pct = Math.round(correct / total * 100);
   const col = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--pink)';
   let html = '<div class="fade-in">';
-  html += '<h1>Your Weak Topic Progress</h1>';
+  html += '<h1>' + (starterMode ? 'Your Topic Snapshot' : 'Your Weak Topic Progress') + '</h1>';
   html += '<p class="sub">' + (result.overall || 'Here is your weak-topic progress.') + '</p>';
   html += '<div class="result-grid">';
   html += '<div class="r-card"><div class="r-num" style="color:' + col + '">' + pct + '%</div><div class="r-label">This Test Score</div></div>';
@@ -276,10 +273,17 @@ function submitTest() {
     if (answers[q.id] === q.ans) topicScores[q.topic].correct++;
   });
   const correct = allQuestions.filter((q) => answers[q.id] === q.ans).length;
-  renderResults(buildResultSummary(topicScores, currentFocusTopic), correct, total);
+  API.submitAssessment(
+    allQuestions.map((q) => answers[q.id]),
+    allQuestions.map((q) => ({ q: q.q, opts: q.opts, ans: q.ans, topic: q.topic })),
+    currentStudent?.cls || ''
+  ).catch((err) => console.warn('Weak-topic assessment save skipped:', err.message || err));
+  renderResults(buildResultSummary(topicScores, currentFocusTopic || suggestedTopics[0] || 'your recent topics'), correct, total);
+  starterMode = false;
 }
 
 buildQuiz();
 </script>
 </body>
 </html>
+
