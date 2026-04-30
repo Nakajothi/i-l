@@ -157,6 +157,9 @@ const API = {
   getAssessmentHistory() {
     return this.get('/assessment/history', this.token());
   },
+  generateWeakTopicTest(payload) {
+    return this.post('/student/weak-topics/test', payload || {}, this.token());
+  },
 
   // ── CHAT ─────────────────────────────────────────────
   async sendChatMessage(message, sessionKey) {
