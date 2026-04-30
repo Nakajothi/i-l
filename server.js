@@ -461,7 +461,7 @@ async function callGeminiForMcqs(payload) {
   }
   throw new Error(errors.join(' | ') || 'Could not generate MCQs with Gemini.');
 }
-function buildWeakTopicMcqPrompt({ classScope, boardScope, subjectScope, topic, questionCount, previousQuestions = [] }) {
+function buildWeakTopicMcqPrompt({ classScope, boardScope, subjectScope, topic, focusTopics = [], questionCount, previousQuestions = [], starterMode = false }) {
   const cls = String(classScope || '').trim() || 'all';
   const board = cls === 'all' ? 'all boards' : (normalizeBoardScope(boardScope || 'state') === 'cbse' ? 'CBSE' : 'State Board');
   const subject = (cls === '11' || cls === '12')
@@ -478,7 +478,7 @@ You are creating a weak-topic remedial MCQ test for a student.
 Target class: ${cls === 'all' ? 'Mixed classes' : `Class ${cls}`}
 Board: ${board}
 Subject: ${subject}
-Weak topic to focus on: ${topic}
+${starterMode ? `Starter diagnostic topics to cover: ${focusTopics.join(', ')}` : `Weak topic to focus on: ${topic}`}
 
 Return ONLY valid JSON.
 Return a JSON array with exactly ${questionCount} question objects.
@@ -491,7 +491,7 @@ Each question object must have:
 - explanation: short one-line explanation
 
 Rules:
-- Keep all questions strictly inside the weak topic: ${topic}.
+- ${starterMode ? `Spread the ${questionCount} questions across different topics from this list: ${focusTopics.join(', ')}. Avoid repeating the same topic too much.` : `Keep all questions strictly inside the weak topic: ${topic}.`}
 - Make them one-mark / quick-practice level.
 - Keep the language clear and student-friendly.
 - Avoid duplicate questions.
@@ -1371,17 +1371,16 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
     if (!student) return res.status(404).json({ error: 'Student not found.' });
 
     const latestAssessment = db.prepare('SELECT * FROM assessments WHERE student_id=? ORDER BY taken_at DESC LIMIT 1').get(req.student.id);
-    if (!latestAssessment) {
-      return res.status(400).json({ error: 'Please complete your diagnostic test first.' });
-    }
-
     const topicScores = latestAssessment?.topic_scores ? JSON.parse(latestAssessment.topic_scores || '{}') : {};
     const weakTopics = latestAssessment?.weak_topics ? JSON.parse(latestAssessment.weak_topics || '[]') : [];
     const requestedTopic = String(req.body?.focusTopic || '').trim();
     const previousQuestions = Array.isArray(req.body?.previousQuestions) ? req.body.previousQuestions : [];
+    const starterMode = !latestAssessment;
     let focusTopic = requestedTopic;
+    const boardInfo = getBoardMathTopics(student.class || req.student.class, student.board || 'state', student.subject || req.student.subject);
+    const starterTopics = (boardInfo.topics || []).slice(0, Math.max(QUESTIONS_PER_TEST || 5, 5));
 
-    if (!focusTopic) {
+    if (!starterMode && !focusTopic) {
       const rankedWeakTopics = Object.entries(topicScores)
         .sort((a, b) => Number(a[1] || 0) - Number(b[1] || 0))
         .map(([topic]) => topic)
@@ -1389,12 +1388,8 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
       focusTopic = rankedWeakTopics[0] || weakTopics[0] || '';
     }
 
-    if (!focusTopic) {
-      return res.json({
-        success: true,
-        ready: false,
-        message: 'No weak topics detected right now. Great work on your diagnostic test.'
-      });
+    if (!starterMode && !focusTopic) {
+      focusTopic = starterTopics[0] || '';
     }
 
     const result = await callGeminiForWeakTopicTest({
@@ -1402,8 +1397,10 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
       subjectScope: student.subject || req.student.subject,
       boardScope: student.board || 'state',
       topic: focusTopic,
+      focusTopics: starterMode ? starterTopics : [],
       questionCount: 5,
-      previousQuestions
+      previousQuestions,
+      starterMode
     });
 
     const generated = result.parsed;
@@ -1415,8 +1412,10 @@ app.post('/api/student/weak-topics/test', authStudent, async (req, res) => {
     res.json({
       success: true,
       ready: true,
+      starterMode,
       modelUsed: result.modelUsed,
-      focusTopic,
+      focusTopic: starterMode ? '' : focusTopic,
+      suggestedTopics: starterMode ? starterTopics : [],
       weakTopics,
       topicScores,
       questions: questions.map((item, index) => sanitizeGeneratedMcq(item, index))
@@ -1999,7 +1998,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
