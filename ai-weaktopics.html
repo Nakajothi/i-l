@@ -73,71 +73,112 @@ h1{font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;margin-bottom:
 </div>
 <script src="api.js"></script>
 <script>
-const topics = {
-  'Algebra': [
-    {q:'Solve: 2x&sup2; - 5x + 3 = 0', opts:['x = 1, x = 3/2','x = -1, x = 3/2','x = 1, x = -3/2','x = 2, x = 3'], ans:0},
-    {q:'If A = {1,2,3} and B = {2,3,4}, what is A &cap; B?', opts:['{1,2,3,4}','{2,3}','{1,4}','{1,2,3}'], ans:1}
-  ],
-  'Trigonometry': [
-    {q:'What is the value of sin(30&deg;) + cos(60&deg;)?', opts:['0','1','1/2','&radic;3/2'], ans:1},
-    {q:'tan(45&deg;) = ?', opts:['0','&radic;3','1','1/&radic;3'], ans:2}
-  ],
-  'Calculus': [
-    {q:'d/dx (x&sup3;) = ?', opts:['x&sup2;','3x','3x&sup2;','x&sup3;'], ans:2},
-    {q:'&int; 2x dx = ?', opts:['x&sup2; + C','2x&sup2; + C','x + C','2 + C'], ans:0}
-  ],
-  'Statistics': [
-    {q:'Mean of 4, 8, 12, 16, 20 is:', opts:['10','12','14','16'], ans:1},
-    {q:'Variance measures:', opts:['Central value','Spread of data','Frequency','Mode'], ans:1}
-  ],
-  'Probability': [
-    {q:'P(A)=0.4, P(B)=0.5, P(A&cap;B)=0.2. Find P(A&cup;B).', opts:['0.7','0.6','0.9','0.3'], ans:0},
-    {q:'A die is rolled. P(even number) = ?', opts:['1/3','1/2','1/6','2/3'], ans:1}
-  ]
-};
-
+const QUESTIONS_PER_TEST = 5;
 let allQuestions = [];
 let answers = {};
+let currentStudent = null;
+let currentFocusTopic = '';
+let previousGeneratedQuestions = [];
 
-function buildQuiz() {
-  allQuestions = [];
-  answers = {};
-  Object.entries(topics).forEach(([topic, qs]) => {
-    qs.forEach((q, i) => allQuestions.push({...q, topic, id: topic + '_' + i}));
-  });
-  renderQuiz();
+function getCurrentStudent() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('ilearn_student') || '{}');
+    if (!stored || (!stored.class && !stored.cls)) return null;
+    return {
+      name: stored.name || 'Student',
+      cls: String(stored.class || stored.cls || '').trim(),
+      subject: stored.subject || 'maths',
+      board: stored.board || 'state'
+    };
+  } catch {
+    return null;
+  }
 }
 
-function renderQuiz() {
+function renderLoginRequired() {
+  document.getElementById('mainContent').innerHTML = [
+    '<div class="test-card fade-in">',
+    '<h1>Login Required</h1>',
+    '<p class="sub">Please log in as a student first so we can load your weak-topic practice test.</p>',
+    '<button class="btn-primary" onclick="window.location.href=\'index.html\'">Go to Home</button>',
+    '</div>'
+  ].join('');
+}
+
+function renderAssessmentRequired(message) {
+  document.getElementById('mainContent').innerHTML = [
+    '<div class="test-card fade-in">',
+    '<h1>Diagnostic Test Needed</h1>',
+    '<p class="sub">' + (message || 'Please complete your diagnostic test first so we can identify your weak topics.') + '</p>',
+    '<button class="btn-primary" onclick="window.location.href=\'index.html#assessment\'">Take Diagnostic Test</button>',
+    '</div>'
+  ].join('');
+}
+
+function normalizeAiQuestion(question, index) {
+  const options = Array.isArray(question?.options) ? question.options : [];
+  return {
+    id: 'weak_' + index,
+    q: String(question?.question || '').trim(),
+    opts: options.map((option) => typeof option === 'string' ? option : String(option?.text || '').trim()),
+    ans: Number(question?.correctIndex || 0),
+    topic: String(question?.topic || currentFocusTopic || 'Weak Topic').trim(),
+    explanation: String(question?.explanation || '').trim()
+  };
+}
+
+async function buildQuiz() {
+  currentStudent = getCurrentStudent();
+  if (!currentStudent) {
+    renderLoginRequired();
+    return;
+  }
+
+  document.getElementById('mainContent').innerHTML = '<div class="loading-box"><div class="spinner"></div><p>AI is preparing your weak-topic practice test...</p></div>';
+  try {
+    const data = await API.generateWeakTopicTest({
+      focusTopic: currentFocusTopic || undefined,
+      previousQuestions: previousGeneratedQuestions
+    });
+    if (!data.ready) {
+      renderAssessmentRequired(data.message || 'No weak topics detected right now.');
+      return;
+    }
+    currentFocusTopic = data.focusTopic || '';
+    allQuestions = (data.questions || []).map((question, index) => normalizeAiQuestion({
+      ...question,
+      topic: data.focusTopic || question.topic
+    }, index));
+    previousGeneratedQuestions = allQuestions.map((question) => ({ question: question.q }));
+    answers = {};
+    renderQuiz(data.modelUsed || '');
+  } catch (err) {
+    renderAssessmentRequired(err.message || 'Could not load your weak-topic test right now.');
+  }
+}
+
+function renderQuiz(modelUsed) {
   const total = allQuestions.length;
   const answered = Object.keys(answers).length;
   const pct = Math.round(answered / total * 100);
-  let html = '<h1>Quick Diagnostic Test</h1>';
-  html += '<p class="sub">Answer all ' + total + ' questions honestly. AI will identify your weak topics and suggest targeted exercises.</p>';
+  let html = '<h1>Weak Topic Practice Test</h1>';
+  html += '<p class="sub">AI has created 5 follow-up questions for your weak area: <strong>' + (currentFocusTopic || 'Weak Topic') + '</strong>.' + (modelUsed ? ' Generated using ' + modelUsed + '.' : '') + '</p>';
   html += '<div class="progress-top"><span>' + answered + ' of ' + total + ' answered</span><span id="pct">' + pct + '%</span></div>';
   html += '<div class="prog-bar"><div class="prog-fill" id="progFill" style="width:' + pct + '%"></div></div>';
-
-  const byTopic = {};
-  allQuestions.forEach(q => { if (!byTopic[q.topic]) byTopic[q.topic] = []; byTopic[q.topic].push(q); });
-
-  Object.entries(byTopic).forEach(([topic, qs]) => {
-    html += '<div class="test-card"><h3>' + topic + '</h3><p>Answer the questions below.</p>';
-    qs.forEach(q => {
-      const sel = answers[q.id];
-      html += '<div class="q-block"><div class="q-text">' + q.q + '</div><div class="q-options">';
-      q.opts.forEach((opt, i) => {
-        const isSel = sel === i;
-        html += '<div class="q-opt' + (isSel ? ' selected' : '') + '" onclick="selectAns(\'' + q.id + '\',' + i + ',this)"><div class="opt-dot"></div>' + opt + '</div>';
-      });
-      html += '</div></div>';
+  html += '<div class="test-card"><h3>' + (currentFocusTopic || 'Weak Topic Practice') + '</h3><p>Answer all 5 questions to strengthen this topic.</p>';
+  allQuestions.forEach((q) => {
+    const sel = answers[q.id];
+    html += '<div class="q-block"><div class="q-text">' + q.q + '</div><div class="q-options">';
+    q.opts.forEach((opt, i) => {
+      const isSel = sel === i;
+      html += '<div class="q-opt' + (isSel ? ' selected' : '') + '" onclick="selectAns(\'' + q.id + '\',' + i + ',this)"><div class="opt-dot"></div>' + opt + '</div>';
     });
-    html += '</div>';
+    html += '</div></div>';
   });
-
-  const allAnswered = answered === total;
+  html += '</div>';
   html += '<div style="text-align:center;margin-top:8px;">';
-  if (allAnswered) {
-    html += '<button class="btn-primary" onclick="submitTest()">Analyse My Results</button>';
+  if (answered === total) {
+    html += '<button class="btn-primary" onclick="submitTest()">Check This Weak Topic</button>';
   } else {
     html += '<button class="btn-primary" style="opacity:0.5;cursor:not-allowed;">Answer all ' + (total - answered) + ' remaining questions</button>';
   }
@@ -160,48 +201,49 @@ function selectAns(id, idx, el) {
   if (answered === total) renderQuiz();
 }
 
-async function submitTest() {
-  const total = allQuestions.length;
-  if (Object.keys(answers).length < total) return;
-  const topicScores = {};
-  allQuestions.forEach(q => {
-    if (!topicScores[q.topic]) topicScores[q.topic] = {correct: 0, total: 0};
-    topicScores[q.topic].total++;
-    if (answers[q.id] === q.ans) topicScores[q.topic].correct++;
+function buildResultSummary(topicScoreMap, focusTopic) {
+  const topics = Object.entries(topicScoreMap || {}).map(([topic, score]) => {
+    const safeScore = Number(score?.correct) && Number(score?.total)
+      ? Math.round((score.correct / score.total) * 100)
+      : (Number(score) || 0);
+    const isStrong = safeScore >= 80;
+    const isWeak = safeScore < 60;
+    return {
+      topic,
+      score: safeScore,
+      status: isStrong ? 'good' : (isWeak ? 'weak' : 'average'),
+      advice: isStrong
+        ? 'Good recovery in this topic. Keep one short revision round this week.'
+        : isWeak
+          ? 'This topic still needs focus. Try another 5-question AI practice set after revising the core idea.'
+          : 'You are improving. One more short practice set can move this topic into your strong list.',
+      exercises: isWeak
+        ? [
+            'Revise the key formula or method for ' + topic + '.',
+            'Solve 2 similar sums from class notes.',
+            'Take the next AI test for ' + topic + '.'
+          ]
+        : []
+    };
   });
-  const correct = allQuestions.filter(q => answers[q.id] === q.ans).length;
-  document.getElementById('mainContent').innerHTML = '<div class="loading-box"><div class="spinner"></div><p>AI is analysing your results...</p></div>';
-  const scoreStr = Object.entries(topicScores).map(([t, s]) => t + ': ' + s.correct + '/' + s.total).join(', ');
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{role: 'user', content: 'A student completed a Maths diagnostic test. Scores by topic: ' + scoreStr + '. Total: ' + correct + '/' + total + '.\n\nReturn ONLY JSON (no markdown):\n{\n  "overall": "one encouraging sentence",\n  "topics": [\n    {\n      "topic": "Topic Name",\n      "score": 50,\n      "status": "weak|average|good",\n      "advice": "one specific actionable tip",\n      "exercises": ["exercise 1", "exercise 2", "exercise 3"]\n    }\n  ]\n}\nstatus rules: score below 50 = weak, 50 to 80 = average, above 80 = good.'}]
-      })
-    });
-    const data = await res.json();
-    let raw = (data.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim();
-    renderResults(JSON.parse(raw), correct, total, topicScores);
-  } catch(e) {
-    renderResultsFallback(correct, total, topicScores);
-  }
+  return {
+    overall: 'This 5-question AI practice test focused on ' + (focusTopic || 'your weakest area') + '.',
+    topics
+  };
 }
 
-function renderResults(result, correct, total, topicScores) {
+function renderResults(result, correct, total) {
   const pct = Math.round(correct / total * 100);
   const col = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--pink)';
   let html = '<div class="fade-in">';
-  html += '<h1>Your Analysis Report</h1>';
-  html += '<p class="sub">' + (result.overall || 'Great effort! Here is your detailed breakdown.') + '</p>';
+  html += '<h1>Your Weak Topic Progress</h1>';
+  html += '<p class="sub">' + (result.overall || 'Here is your weak-topic progress.') + '</p>';
   html += '<div class="result-grid">';
-  html += '<div class="r-card"><div class="r-num" style="color:' + col + '">' + pct + '%</div><div class="r-label">Overall Score</div></div>';
+  html += '<div class="r-card"><div class="r-num" style="color:' + col + '">' + pct + '%</div><div class="r-label">This Test Score</div></div>';
   html += '<div class="r-card"><div class="r-num" style="color:var(--green)">' + correct + '</div><div class="r-label">Correct Answers</div></div>';
   html += '<div class="r-card"><div class="r-num" style="color:var(--pink)">' + (total - correct) + '</div><div class="r-label">Need Improvement</div></div>';
   html += '</div>';
-  (result.topics || []).forEach(t => {
+  (result.topics || []).forEach((t) => {
     const s = t.score || 0;
     const barCol = s >= 75 ? 'var(--green)' : s >= 50 ? 'var(--yellow)' : 'var(--pink)';
     const statusTag = t.status === 'weak' ? '<span class="tag weak">Needs Focus</span>' : t.status === 'good' ? '<span class="tag ok">Strong</span>' : '<span class="tag avg">Developing</span>';
@@ -212,33 +254,29 @@ function renderResults(result, correct, total, topicScores) {
     html += '<div style="font-size:0.85rem;color:var(--text);margin-top:10px;">' + (t.advice || '') + '</div>';
     if (t.status === 'weak' && t.exercises && t.exercises.length) {
       html += '<div class="exercises">';
-      t.exercises.forEach(e => { html += '<div class="ex-item"><span class="ex-arrow">&rarr;</span>' + e + '</div>'; });
+      t.exercises.forEach((e) => { html += '<div class="ex-item"><span class="ex-arrow">&rarr;</span>' + e + '</div>'; });
       html += '</div>';
     }
     html += '</div>';
   });
   html += '<div style="text-align:center;margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">';
-  html += '<button class="btn-outline" onclick="buildQuiz()">Retake Test</button>';
+  html += '<button class="btn-outline" onclick="buildQuiz()">Next Test</button>';
   html += '<button class="btn-primary" onclick="window.location.href=\'ai-timetable.html\'">Build My Study Plan &rarr;</button>';
   html += '</div></div>';
   document.getElementById('mainContent').innerHTML = html;
 }
 
-function renderResultsFallback(correct, total, topicScores) {
-  const pct = Math.round(correct / total * 100);
-  let html = '<div class="fade-in"><h1>Your Results</h1>';
-  html += '<div class="result-grid">';
-  html += '<div class="r-card"><div class="r-num" style="color:var(--green)">' + pct + '%</div><div class="r-label">Score</div></div>';
-  html += '<div class="r-card"><div class="r-num">' + correct + '</div><div class="r-label">Correct</div></div>';
-  html += '<div class="r-card"><div class="r-num" style="color:var(--pink)">' + (total - correct) + '</div><div class="r-label">Incorrect</div></div>';
-  html += '</div>';
-  Object.entries(topicScores).forEach(([t, s]) => {
-    const p = Math.round(s.correct / s.total * 100);
-    const c = p >= 75 ? 'var(--green)' : p >= 50 ? 'var(--yellow)' : 'var(--pink)';
-    html += '<div class="topic-result"><h4>' + t + '</h4><div class="topic-bar"><div class="topic-bar-fill" style="width:' + p + '%;background:' + c + '"></div></div><div style="font-size:0.82rem;color:var(--muted);margin-top:6px;">' + s.correct + '/' + s.total + ' correct</div></div>';
+function submitTest() {
+  const total = allQuestions.length;
+  if (Object.keys(answers).length < total) return;
+  const topicScores = {};
+  allQuestions.forEach((q) => {
+    if (!topicScores[q.topic]) topicScores[q.topic] = { correct: 0, total: 0 };
+    topicScores[q.topic].total++;
+    if (answers[q.id] === q.ans) topicScores[q.topic].correct++;
   });
-  html += '<button class="btn-primary" style="margin-top:16px;" onclick="buildQuiz()">Retake Test</button></div>';
-  document.getElementById('mainContent').innerHTML = html;
+  const correct = allQuestions.filter((q) => answers[q.id] === q.ans).length;
+  renderResults(buildResultSummary(topicScores, currentFocusTopic), correct, total);
 }
 
 buildQuiz();
