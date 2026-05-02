@@ -1412,7 +1412,10 @@ function renderTeacherMcqList(mcqs) {
     const attempted = studentReports.filter((s) => s.attemptedCount > 0);
     const notAttempted = studentReports.filter((s) => s.attemptedCount === 0);
     const attemptedHtml = attempted.length
-      ? attempted.map((s) => `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid rgba(255,255,255,0.06);"><div><div style="font-weight:700;">${s.name}</div><div style="font-size:0.8rem;color:var(--muted);">Class ${s.class} - ${s.email || 'No email'}</div></div><div style="text-align:right;"><div style="font-weight:700;color:var(--green);">${s.score}</div><div style="font-size:0.8rem;color:var(--muted);">Attempted ${s.attemptedCount}, Wrong ${s.wrongCount}</div></div></div>`).join('')
+      ? attempted.map((s) => {
+        const studentAccuracy = s.attemptedCount ? Math.round(((s.correctCount || 0) / s.attemptedCount) * 100) : 0;
+        return `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid rgba(255,255,255,0.06);"><div><div style="font-weight:700;">${s.name}</div><div style="font-size:0.8rem;color:var(--muted);">Class ${s.class} - ${s.email || 'No email'}</div></div><div style="text-align:right;"><div style="font-weight:700;color:var(--green);">${s.score} (${studentAccuracy}%)</div><div style="font-size:0.8rem;color:var(--muted);">Correct ${s.correctCount || 0}, Wrong ${s.wrongCount}, Attempted ${s.attemptedCount}</div></div></div>`;
+      }).join('')
       : '<div style="color:var(--muted);font-size:0.84rem;">No students have attempted this batch yet.</div>';
     const notAttemptedHtml = notAttempted.length
       ? `<div style="margin-top:12px;color:var(--muted);font-size:0.82rem;line-height:1.7;"><strong style="color:var(--yellow);">Not attempted:</strong> ${notAttempted.map((s) => `${s.name} (Class ${s.class})`).join(', ')}</div>`
@@ -1422,11 +1425,12 @@ function renderTeacherMcqList(mcqs) {
         <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
           <div>
             <div style="font-size:0.78rem;color:var(--blue);font-weight:700;margin-bottom:6px;">${mcq.batch_title || mcq.title || 'Daily MCQ Batch'} - Class ${mcq.class_scope || 'all'}${mcq.board_scope && mcq.board_scope !== 'all' ? ' - ' + (mcq.board_scope === 'cbse' ? 'CBSE' : 'State Board') : ''}${mcq.subject_scope && mcq.subject_scope !== 'all' ? ' - ' + (mcq.subject_scope === 'business-maths' ? 'Business Maths' : 'Maths') : ''}</div>
-            <div style="font-weight:700;line-height:1.5;">${mcq.question_count || 0} questions - ends ${mcq.available_until || 'in 24 hours'}</div>
+            <div style="font-weight:700;line-height:1.5;">${mcq.question_count || 0} questions - student access ends ${mcq.available_until || 'in 24 hours'}</div>
           </div>
           <div style="min-width:220px;text-align:right;">
             <div style="font-weight:700;color:var(--green);">${accuracy}% accuracy</div>
             <div style="color:var(--muted);font-size:0.82rem;margin-top:4px;">Attempted: ${mcq.attempted_students || 0} | Not attempted: ${mcq.not_attempted_students || 0}</div>
+            <div style="color:var(--muted);font-size:0.82rem;margin-top:4px;">Teacher results stay here for 2 days</div>
           </div>
         </div>
         <div style="margin-top:16px;padding:16px;border-radius:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);">
@@ -1950,7 +1954,6 @@ window.addEventListener('hashchange', () => {
     if (teacherTab) switchTab('teacher', teacherTab);
   }
 });
-
 
 
 
