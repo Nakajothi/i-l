@@ -50,6 +50,7 @@ const API = {
 
   get(path, token)        { return this.request('GET',  path, null, token); },
   post(path, body, token) { return this.request('POST', path, body, token); },
+  patch(path, body, token){ return this.request('PATCH', path, body, token); },
   delete(path, token)     { return this.request('DELETE', path, null, token); },
 
   // ── STUDENT ──────────────────────────────────────────
@@ -197,6 +198,8 @@ const API = {
   getTeacherWeeklyTests()              { return this.get('/teacher/weekly-tests', this.teacherToken()); },
   saveTeacherWeeklyTests(payload)      { return this.post('/teacher/weekly-tests', payload, this.teacherToken()); },
   saveTeacherFees(payload)             { return this.post('/teacher/fees', payload, this.teacherToken()); },
+  updateTeacherFeePayment(id, payload) { return this.patch('/teacher/fees/' + encodeURIComponent(id), payload, this.teacherToken()); },
+  deleteTeacherFeePayment(id)          { return this.delete('/teacher/fees/' + encodeURIComponent(id), this.teacherToken()); },
 
   // ── DOUBTS ───────────────────────────────────────────
   getStudentDoubts()                            { return this.get('/student/doubts', this.token()); },
@@ -223,6 +226,7 @@ const API = {
     console.warn('[I LEARN API] Backend not reachable:', e.message);
   }
 })();
+
 
 
 
