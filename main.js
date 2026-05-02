@@ -1591,6 +1591,20 @@ function renderTeacherFeeTable(students) {
   if (!students.length) { body.innerHTML = '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students available.</td></tr>'; return; }
   body.innerHTML = students.map((student) => {
     const fee = student.feeSummary || {};
+    const payments = Array.isArray(fee.payments) ? fee.payments.slice(0, 3) : [];
+    const paymentHistory = payments.length
+      ? payments.map((payment) => `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:0.82rem;color:var(--muted);">
+              Rs ${Number(payment.amount_paid || 0)} on ${payment.paid_on || '-'}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-outline-sm" type="button" onclick="editTeacherFeePayment(${Number(payment.id || 0)})">Edit</button>
+              <button class="btn-outline-sm" type="button" onclick="deleteTeacherFeePayment(${Number(payment.id || 0)})">Delete</button>
+            </div>
+          </div>
+        `).join('')
+      : '<div style="font-size:0.82rem;color:var(--muted);">No saved fee entries yet.</div>';
     return `
       <tr data-student-id="${student.id}">
         <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.name}</td>
@@ -1600,8 +1614,84 @@ function renderTeacherFeeTable(students) {
         <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);color:${Number(fee.pending || 0) > 0 ? 'var(--pink)' : 'var(--green)'};">Rs ${fee.pending || 0}</td>
         <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);"><input type="number" min="0" id="fee-paid-${student.id}" placeholder="Amount paid" style="width:140px;" /></td>
       </tr>
+      <tr>
+        <td colspan="6" style="padding:0 12px 14px 12px;border-top:0;">
+          <div style="margin:0 0 4px 0;padding:12px 14px;border:1px solid rgba(255,255,255,0.06);border-radius:14px;background:rgba(255,255,255,0.02);">
+            <div style="font-size:0.76rem;color:var(--blue);font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Recent Fee Entries</div>
+            ${paymentHistory}
+          </div>
+        </td>
+      </tr>
     `;
   }).join('');
+}
+
+function findTeacherFeePayment(paymentId) {
+  const safeId = Number(paymentId);
+  for (const student of teacherStudentCache) {
+    const payments = Array.isArray(student?.feeSummary?.payments) ? student.feeSummary.payments : [];
+    const match = payments.find((payment) => Number(payment.id) === safeId);
+    if (match) return { student, payment: match };
+  }
+  return null;
+}
+
+async function editTeacherFeePayment(paymentId) {
+  const found = findTeacherFeePayment(paymentId);
+  if (!found) {
+    showTeacherPanelMessage('teacherFeeMessage', 'Could not find that fee payment.', true);
+    return;
+  }
+  const currentAmount = Number(found.payment.amount_paid || 0);
+  const currentDate = String(found.payment.paid_on || '').trim();
+  const amountInput = window.prompt(`Edit amount for ${found.student.name}`, currentAmount ? String(currentAmount) : '');
+  if (amountInput === null) return;
+  const nextAmount = Number(amountInput);
+  if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+    showTeacherPanelMessage('teacherFeeMessage', 'Enter a valid payment amount greater than 0.', true);
+    return;
+  }
+  const dateInput = window.prompt(`Edit payment date for ${found.student.name}`, currentDate);
+  if (dateInput === null) return;
+  const nextDate = String(dateInput || '').trim();
+  if (!nextDate) {
+    showTeacherPanelMessage('teacherFeeMessage', 'Payment date cannot be empty.', true);
+    return;
+  }
+  try {
+    const result = await API.updateTeacherFeePayment(paymentId, { amountPaid: nextAmount, paidOn: nextDate });
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherPanelMessage('teacherFeeMessage', 'Fee payment updated successfully.', false);
+  } catch (err) {
+    showTeacherPanelMessage('teacherFeeMessage', err.message || 'Could not update fee payment.', true);
+  }
+}
+
+async function deleteTeacherFeePayment(paymentId) {
+  const found = findTeacherFeePayment(paymentId);
+  if (!found) {
+    showTeacherPanelMessage('teacherFeeMessage', 'Could not find that fee payment.', true);
+    return;
+  }
+  const confirmed = window.confirm(`Delete fee entry of Rs ${Number(found.payment.amount_paid || 0)} for ${found.student.name}?`);
+  if (!confirmed) return;
+  try {
+    const result = await API.deleteTeacherFeePayment(paymentId);
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherPanelMessage('teacherFeeMessage', 'Fee payment deleted successfully.', false);
+  } catch (err) {
+    showTeacherPanelMessage('teacherFeeMessage', err.message || 'Could not delete fee payment.', true);
+  }
 }
 
 async function saveTeacherFees() {
@@ -1954,7 +2044,6 @@ window.addEventListener('hashchange', () => {
     if (teacherTab) switchTab('teacher', teacherTab);
   }
 });
-
 
 
 
