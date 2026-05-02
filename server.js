@@ -76,7 +76,7 @@ function getClassFeeTarget(studentClass) {
   }
 }
 function buildFeeSummary(studentId, studentClass) {
-  const payments = db.prepare('SELECT amount_paid, paid_on, created_at FROM fee_payments WHERE student_id=? ORDER BY paid_on DESC, created_at DESC LIMIT 20').all(studentId);
+  const payments = db.prepare('SELECT id, teacher_id, amount_paid, paid_on, created_at FROM fee_payments WHERE student_id=? ORDER BY paid_on DESC, created_at DESC LIMIT 20').all(studentId);
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0);
   const totalDue  = getClassFeeTarget(studentClass);
   return { totalDue, totalPaid: Math.round(totalPaid * 100) / 100, pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100), payments };
@@ -113,7 +113,7 @@ function buildTeacherStudentsSnapshot(selectedDate = '') {
       )
     : new Map();
   const feePaymentRows = db.prepare(`
-    SELECT student_id, amount_paid, paid_on, created_at
+    SELECT id, teacher_id, student_id, amount_paid, paid_on, created_at
     FROM fee_payments
     ORDER BY paid_on DESC, created_at DESC
   `).all();
@@ -1844,6 +1844,28 @@ app.post('/api/teacher/fees', authTeacher, (req, res) => {
   res.json({ success: true, students: buildTeacherStudentsSnapshot() });
 });
 
+app.patch('/api/teacher/fees/:id', authTeacher, (req, res) => {
+  const paymentId = Number(req.params.id);
+  const amountPaid = Number(req.body?.amountPaid);
+  const paidOn = String(req.body?.paidOn || '').trim();
+  if (!paymentId) return res.status(400).json({ error: 'Valid payment id is required.' });
+  if (!paidOn) return res.status(400).json({ error: 'Payment date is required.' });
+  if (!Number.isFinite(amountPaid) || amountPaid <= 0) return res.status(400).json({ error: 'Enter a valid payment amount.' });
+  const existing = db.prepare('SELECT id FROM fee_payments WHERE id=?').get(paymentId);
+  if (!existing) return res.status(404).json({ error: 'Fee payment not found.' });
+  db.prepare('UPDATE fee_payments SET amount_paid=?, paid_on=? WHERE id=?').run(amountPaid, paidOn, paymentId);
+  res.json({ success: true, students: buildTeacherStudentsSnapshot() });
+});
+
+app.delete('/api/teacher/fees/:id', authTeacher, (req, res) => {
+  const paymentId = Number(req.params.id);
+  if (!paymentId) return res.status(400).json({ error: 'Valid payment id is required.' });
+  const existing = db.prepare('SELECT id FROM fee_payments WHERE id=?').get(paymentId);
+  if (!existing) return res.status(404).json({ error: 'Fee payment not found.' });
+  db.prepare('DELETE FROM fee_payments WHERE id=?').run(paymentId);
+  res.json({ success: true, students: buildTeacherStudentsSnapshot() });
+});
+
 // ============================================================
 //  TEACHER STUDENTS & ATTENDANCE
 // ============================================================
@@ -2000,6 +2022,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
