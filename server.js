@@ -1605,6 +1605,7 @@ app.get('/api/teacher/mcqs', authTeacher, (req, res) => {
              SUM(CASE WHEN s.is_correct=1 THEN 1 ELSE 0 END) AS correct_count
       FROM daily_mcqs m
       LEFT JOIN daily_mcq_submissions s ON s.mcq_id = m.id
+      WHERE m.created_at >= (CURRENT_TIMESTAMP - INTERVAL '2 days')
       GROUP BY COALESCE(m.batch_title, m.title), m.class_scope, COALESCE(m.subject_scope, 'all'), COALESCE(m.board_scope, 'all')
       ORDER BY MAX(m.created_at) DESC
       LIMIT 20
