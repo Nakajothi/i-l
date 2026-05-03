@@ -1490,6 +1490,7 @@ app.get('/api/teacher/doubts', authTeacher, (req, res) => {
     SELECT d.id, d.question_text, d.question_image, d.answer_text, d.answer_image, d.status,
            d.created_at, d.answered_at, s.name AS student_name, s.class AS student_class
     FROM doubts d JOIN students s ON s.id = d.student_id
+    WHERE d.created_at >= (CURRENT_TIMESTAMP - INTERVAL '1 day')
     ORDER BY CASE WHEN d.status='open' THEN 0 ELSE 1 END, d.created_at DESC
   `).all();
   res.json({ doubts: rows });
