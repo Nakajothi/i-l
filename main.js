@@ -66,11 +66,13 @@ function switchTab(tab, el) {
     loadTeacherAttendance().catch(() => {});
     loadTeacherMcqs().catch(() => {});
     loadTeacherDoubts().catch(() => {});
+    loadTeacherStudentActivity().catch(() => {});
   } else if (tab === 'student' && hasActiveStudentSession()) {
     refreshRoleData().then(() => {
       loadStudentResources();
       loadStudentDoubts();
     });
+    startStudentActivityHeartbeat();
   }
 }
 
@@ -1758,6 +1760,58 @@ function showTeacherAttendanceMessage(message, isError) {
   box.textContent = message;
 }
 
+let studentActivityHeartbeatTimer = null;
+
+function renderTeacherStudentActivity(sessions) {
+  const wrap = document.getElementById('teacherStudentActivityList');
+  if (!wrap) return;
+  if (!Array.isArray(sessions) || !sessions.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No recent student login activity yet.</div>';
+    return;
+  }
+  wrap.innerHTML = sessions.map((session) => `
+    <div style="padding:14px 16px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-weight:700;">${session.studentName || 'Student'}</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">Class ${session.studentClass || '?'}${session.studentEmail ? ' - ' + session.studentEmail : ''}</div>
+      </div>
+      <div style="min-width:260px;text-align:right;">
+        <div style="font-weight:700;color:${session.isOnline ? 'var(--green)' : 'var(--pink)'};">${session.isOnline ? 'Online now' : 'Offline'}</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">Logged in: ${session.loginAt || '-'}</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">${session.isOnline ? 'Last seen: ' + (session.lastSeenAt || '-') : 'Left at: ' + (session.leftAt || session.lastSeenAt || '-')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadTeacherStudentActivity() {
+  if (!hasActiveTeacherSession()) return;
+  const wrap = document.getElementById('teacherStudentActivityList');
+  if (!wrap) return;
+  try {
+    const data = await API.getTeacherStudentActivity();
+    renderTeacherStudentActivity(data.sessions || []);
+  } catch (err) {
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:0.9rem;">${err.message || 'Could not load student activity.'}</div>`;
+  }
+}
+
+function stopStudentActivityHeartbeat() {
+  if (studentActivityHeartbeatTimer) {
+    clearInterval(studentActivityHeartbeatTimer);
+    studentActivityHeartbeatTimer = null;
+  }
+}
+
+function startStudentActivityHeartbeat() {
+  stopStudentActivityHeartbeat();
+  if (!hasActiveStudentSession()) return;
+  API.recordStudentActivityPing().catch(() => {});
+  studentActivityHeartbeatTimer = window.setInterval(() => {
+    API.recordStudentActivityPing().catch(() => {});
+  }, 60000);
+}
+
 // ── DOUBTS ────────────────────────────────────────────────────────────────────
 async function loadStudentDoubts() {
   if (!hasActiveStudentSession()) return;
@@ -2006,7 +2060,8 @@ async function bootstrapDashboard() {
         await Promise.all([
           loadTeacherAttendance(),
           loadTeacherMcqs(),
-          loadTeacherDoubts()
+          loadTeacherDoubts(),
+          loadTeacherStudentActivity()
         ]);
       } catch (e) {
         console.warn('Teacher data load error:', e.message);
@@ -2017,9 +2072,16 @@ async function bootstrapDashboard() {
       try { await refreshRoleData(); } catch (e) { console.warn('Student profile refresh failed:', e.message); }
       try { await loadStudentResources(); } catch (e) { console.warn('Student resources load failed:', e.message); }
       try { await loadStudentDoubts(); } catch (e) { console.warn('Student doubts load failed:', e.message); }
+      if (!localStorage.getItem('ilearn_student_session_id')) {
+        try { await API.recordStudentActivityLogin(); } catch (e) { console.warn('Student login activity failed:', e.message); }
+      }
+      startStudentActivityHeartbeat();
     } else if (role === 'parent') {
+      stopStudentActivityHeartbeat();
       try { await refreshParentDashboard(); } catch (e) { console.warn('Parent dashboard refresh failed:', e.message); }
       try { await loadStudentResources(); } catch (e) { console.warn('Parent resources load failed:', e.message); }
+    } else {
+      stopStudentActivityHeartbeat();
     }
   })();
 
