@@ -1762,14 +1762,17 @@ function showTeacherAttendanceMessage(message, isError) {
 
 let studentActivityHeartbeatTimer = null;
 
-function renderTeacherStudentActivity(sessions) {
+function renderTeacherStudentActivity(sessions, windowStart, windowEnd) {
   const wrap = document.getElementById('teacherStudentActivityList');
   if (!wrap) return;
+  const windowText = (windowStart && windowEnd)
+    ? `<div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Showing login/logout activity from ${windowStart} to ${windowEnd}</div>`
+    : '';
   if (!Array.isArray(sessions) || !sessions.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No recent student login activity yet.</div>';
+    wrap.innerHTML = `${windowText}<div style="color:var(--muted);font-size:0.9rem;">No student activity recorded in this 10 PM to 10 PM window yet.</div>`;
     return;
   }
-  wrap.innerHTML = sessions.map((session) => `
+  wrap.innerHTML = windowText + sessions.map((session) => `
     <div style="padding:14px 16px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-weight:700;">${session.studentName || 'Student'}</div>
@@ -1790,7 +1793,11 @@ async function loadTeacherStudentActivity() {
   if (!wrap) return;
   try {
     const data = await API.getTeacherStudentActivity();
-    renderTeacherStudentActivity(data.sessions || []);
+    renderTeacherStudentActivity(
+      data.sessions || [],
+      data.windowStartLabel || data.windowStart || '',
+      data.windowEndLabel || data.windowEnd || ''
+    );
   } catch (err) {
     wrap.innerHTML = `<div style="color:var(--muted);font-size:0.9rem;">${err.message || 'Could not load student activity.'}</div>`;
   }
@@ -1809,7 +1816,7 @@ function startStudentActivityHeartbeat() {
   API.recordStudentActivityPing().catch(() => {});
   studentActivityHeartbeatTimer = window.setInterval(() => {
     API.recordStudentActivityPing().catch(() => {});
-  }, 60000);
+  }, 30000);
 }
 
 // ── DOUBTS ────────────────────────────────────────────────────────────────────
@@ -2107,6 +2114,45 @@ window.addEventListener('hashchange', () => {
   }
 });
 
+window.addEventListener('pagehide', () => {
+  if (!hasActiveStudentSession()) return;
+  const token = localStorage.getItem('ilearn_token');
+  const sessionId = localStorage.getItem('ilearn_student_session_id');
+  if (!token || !sessionId) return;
+  try {
+    fetch(API.BASE + '/student/activity/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ sessionId }),
+      keepalive: true
+    }).catch(() => {});
+  } catch (_) {}
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && hasActiveStudentSession()) {
+    const token = localStorage.getItem('ilearn_token');
+    const sessionId = localStorage.getItem('ilearn_student_session_id');
+    if (!token || !sessionId) return;
+    try {
+      fetch(API.BASE + '/student/activity/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ sessionId }),
+        keepalive: true
+      }).catch(() => {});
+    } catch (_) {}
+  } else if (document.visibilityState === 'visible' && hasActiveStudentSession()) {
+    API.recordStudentActivityPing().catch(() => {});
+    startStudentActivityHeartbeat();
+  }
+});
 
 
 
