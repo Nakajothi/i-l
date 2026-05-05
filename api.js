@@ -8,6 +8,14 @@ const API = {
   token()        { return localStorage.getItem('ilearn_token'); },
   parentToken()  { return localStorage.getItem('ilearn_parent_token'); },
   teacherToken() { return localStorage.getItem('ilearn_teacher_token'); },
+  studentSessionId() {
+    let sessionId = localStorage.getItem('ilearn_student_session_id');
+    if (!sessionId) {
+      sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem('ilearn_student_session_id', sessionId);
+    }
+    return sessionId;
+  },
 
   async request(method, path, body, token) {
     const headers = { 'Content-Type': 'application/json' };
@@ -60,6 +68,7 @@ const API = {
     localStorage.setItem('ilearn_student', JSON.stringify(data.student));
     localStorage.removeItem('ilearn_parent_token');
     localStorage.removeItem('ilearn_teacher_token');
+    try { await this.recordStudentActivityLogin(); } catch (_) {}
     return data;
   },
 
@@ -69,6 +78,7 @@ const API = {
     localStorage.setItem('ilearn_student', JSON.stringify(data.student));
     localStorage.removeItem('ilearn_parent_token');
     localStorage.removeItem('ilearn_teacher_token');
+    try { await this.recordStudentActivityLogin(); } catch (_) {}
     return data;
   },
 
@@ -78,6 +88,7 @@ const API = {
     localStorage.setItem('ilearn_student', JSON.stringify(data.student));
     localStorage.removeItem('ilearn_parent_token');
     localStorage.removeItem('ilearn_teacher_token');
+    try { await this.recordStudentActivityLogin(); } catch (_) {}
     return data;
   },
 
@@ -86,10 +97,22 @@ const API = {
   getStudentFeeCard() { return this.get('/student/dashboard/fees', this.token()); },
   getStudentWeeklyTestCard() { return this.get('/student/dashboard/weekly-tests', this.token()); },
 
-  logoutStudent() {
+  async logoutStudent() {
+    try { await this.recordStudentActivityLogout(); } catch (_) {}
     ['ilearn_token','ilearn_student','ilearn_student_profile',
-     'ilearn_student_timetable','ilearn_chat_session'].forEach(k => localStorage.removeItem(k));
+     'ilearn_student_timetable','ilearn_chat_session','ilearn_student_session_id'].forEach(k => localStorage.removeItem(k));
     window.location.href = 'index.html';
+  },
+  recordStudentActivityLogin() {
+    return this.post('/student/activity/login', { sessionId: this.studentSessionId() }, this.token());
+  },
+  recordStudentActivityPing() {
+    return this.post('/student/activity/ping', { sessionId: this.studentSessionId() }, this.token());
+  },
+  recordStudentActivityLogout() {
+    const sessionId = localStorage.getItem('ilearn_student_session_id');
+    if (!sessionId) return Promise.resolve({ success: true });
+    return this.post('/student/activity/logout', { sessionId }, this.token());
   },
 
   // ── PARENT ───────────────────────────────────────────
@@ -140,6 +163,9 @@ const API = {
   getTeacherStudents(date) {
     const suffix = date ? '?date=' + encodeURIComponent(date) : '';
     return this.get('/teacher/students' + suffix, this.teacherToken());
+  },
+  getTeacherStudentActivity() {
+    return this.get('/teacher/student-activity', this.teacherToken());
   },
 
   saveTeacherAttendance(date, attendance) {
