@@ -81,6 +81,38 @@ function buildFeeSummary(studentId, studentClass) {
   const totalDue  = getClassFeeTarget(studentClass);
   return { totalDue, totalPaid: Math.round(totalPaid * 100) / 100, pending: Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100), payments };
 }
+function formatDbTimestamp(date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+function formatActivityLabel(date) {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(date);
+}
+function getTeacherActivityWindow() {
+  const offsetMs = 330 * 60 * 1000;
+  const localNow = new Date(Date.now() + offsetMs);
+  const localHour = localNow.getUTCHours();
+  const startLocalMs = Date.UTC(
+    localNow.getUTCFullYear(),
+    localNow.getUTCMonth(),
+    localNow.getUTCDate(),
+    22, 0, 0, 0
+  ) - (localHour < 22 ? 24 * 60 * 60 * 1000 : 0);
+  const startUtc = new Date(startLocalMs - offsetMs);
+  const endUtc = new Date(startUtc.getTime() + (24 * 60 * 60 * 1000));
+  return {
+    startUtc,
+    endUtc,
+    startDb: formatDbTimestamp(startUtc),
+    endDb: formatDbTimestamp(endUtc)
+  };
+}
 function buildTeacherStudentsSnapshot(selectedDate = '') {
   const students = db.prepare(`
     SELECT id, name, email, class, subject, approval_status, mobile, board, created_at
@@ -1536,6 +1568,7 @@ app.get('/api/teacher/doubts', authTeacher, (req, res) => {
 });
 
 app.get('/api/teacher/student-activity', authTeacher, (req, res) => {
+  const activityWindow = getTeacherActivityWindow();
   const rows = db.prepare(`
     SELECT activity.student_id, activity.session_id, activity.login_at, activity.last_seen_at, activity.logout_at,
            activity.student_name, activity.student_class, activity.student_email,
@@ -1550,13 +1583,18 @@ app.get('/api/teacher/student-activity', authTeacher, (req, res) => {
       FROM student_activity_sessions sas
       JOIN students s ON s.id = sas.student_id
       WHERE COALESCE(s.approval_status, 'accepted') <> 'rejected'
-        AND sas.login_at >= (CURRENT_TIMESTAMP - INTERVAL '2 days')
+        AND sas.login_at < ?
+        AND COALESCE(sas.logout_at, sas.last_seen_at, sas.login_at) >= ?
     ) activity
     WHERE activity.row_num = 1
     ORDER BY is_online DESC, activity.last_seen_at DESC, activity.login_at DESC
     LIMIT 30
-  `).all();
+  `).all(activityWindow.endDb, activityWindow.startDb);
   res.json({
+    windowStart: activityWindow.startUtc.toISOString(),
+    windowEnd: activityWindow.endUtc.toISOString(),
+    windowStartLabel: formatActivityLabel(activityWindow.startUtc),
+    windowEndLabel: formatActivityLabel(activityWindow.endUtc),
     sessions: rows.map((row) => ({
       studentId: row.student_id,
       sessionId: row.session_id,
@@ -2099,7 +2137,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
