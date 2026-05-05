@@ -872,6 +872,14 @@ db.exec(`
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     answered_at    TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS student_activity_sessions (
+    id             SERIAL PRIMARY KEY,
+    student_id     INTEGER NOT NULL REFERENCES students(id),
+    session_id     TEXT    NOT NULL UNIQUE,
+    login_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    logout_at      TIMESTAMP
+  );
 `);
 
 // Safe column additions — IF NOT EXISTS prevents errors on redeploy
@@ -1147,6 +1155,37 @@ app.get('/api/student/dashboard/weekly-tests', authStudent, (req, res) => {
     console.error('[GET /api/student/dashboard/weekly-tests]', error.message);
     res.status(500).json({ error: 'Could not load student weekly test card.' });
   }
+});
+
+app.post('/api/student/activity/login', authStudent, (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ error: 'Session id is required.' });
+  const existing = db.prepare('SELECT session_id FROM student_activity_sessions WHERE session_id=?').get(sessionId);
+  if (existing) {
+    db.prepare('UPDATE student_activity_sessions SET student_id=?, login_at=CURRENT_TIMESTAMP, last_seen_at=CURRENT_TIMESTAMP, logout_at=NULL WHERE session_id=?').run(req.student.id, sessionId);
+  } else {
+    db.prepare('INSERT INTO student_activity_sessions (student_id, session_id, login_at, last_seen_at, logout_at) VALUES (?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL)').run(req.student.id, sessionId);
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/student/activity/ping', authStudent, (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ error: 'Session id is required.' });
+  const existing = db.prepare('SELECT session_id FROM student_activity_sessions WHERE session_id=?').get(sessionId);
+  if (existing) {
+    db.prepare('UPDATE student_activity_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE session_id=? AND student_id=?').run(sessionId, req.student.id);
+  } else {
+    db.prepare('INSERT INTO student_activity_sessions (student_id, session_id, login_at, last_seen_at, logout_at) VALUES (?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL)').run(req.student.id, sessionId);
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/student/activity/logout', authStudent, (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ error: 'Session id is required.' });
+  db.prepare('UPDATE student_activity_sessions SET logout_at=CURRENT_TIMESTAMP, last_seen_at=CURRENT_TIMESTAMP WHERE session_id=? AND student_id=?').run(sessionId, req.student.id);
+  res.json({ success: true });
 });
 
 // ============================================================
@@ -1494,6 +1533,43 @@ app.get('/api/teacher/doubts', authTeacher, (req, res) => {
     ORDER BY CASE WHEN d.status='open' THEN 0 ELSE 1 END, d.created_at DESC
   `).all();
   res.json({ doubts: rows });
+});
+
+app.get('/api/teacher/student-activity', authTeacher, (req, res) => {
+  const rows = db.prepare(`
+    SELECT activity.student_id, activity.session_id, activity.login_at, activity.last_seen_at, activity.logout_at,
+           activity.student_name, activity.student_class, activity.student_email,
+           CASE
+             WHEN activity.logout_at IS NULL AND activity.last_seen_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes') THEN 1
+             ELSE 0
+           END AS is_online
+    FROM (
+      SELECT sas.student_id, sas.session_id, sas.login_at, sas.last_seen_at, sas.logout_at,
+             s.name AS student_name, s.class AS student_class, s.email AS student_email,
+             ROW_NUMBER() OVER (PARTITION BY sas.student_id ORDER BY sas.login_at DESC) AS row_num
+      FROM student_activity_sessions sas
+      JOIN students s ON s.id = sas.student_id
+      WHERE COALESCE(s.approval_status, 'accepted') <> 'rejected'
+        AND sas.login_at >= (CURRENT_TIMESTAMP - INTERVAL '2 days')
+    ) activity
+    WHERE activity.row_num = 1
+    ORDER BY is_online DESC, activity.last_seen_at DESC, activity.login_at DESC
+    LIMIT 30
+  `).all();
+  res.json({
+    sessions: rows.map((row) => ({
+      studentId: row.student_id,
+      sessionId: row.session_id,
+      studentName: row.student_name,
+      studentClass: row.student_class,
+      studentEmail: row.student_email,
+      loginAt: row.login_at,
+      lastSeenAt: row.last_seen_at,
+      logoutAt: row.logout_at,
+      isOnline: Number(row.is_online) === 1,
+      leftAt: Number(row.is_online) === 1 ? null : (row.logout_at || row.last_seen_at || null)
+    }))
+  });
 });
 
 app.post('/api/teacher/doubts/:id/answer', authTeacher, (req, res) => {
