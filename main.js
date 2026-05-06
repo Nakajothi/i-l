@@ -1762,14 +1762,23 @@ function showTeacherAttendanceMessage(message, isError) {
 
 let studentActivityHeartbeatTimer = null;
 
+function formatUsageMinutes(totalMinutes) {
+  const safeMinutes = Math.max(0, Number(totalMinutes) || 0);
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+  if (!hours) return `${minutes} min`;
+  if (!minutes) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
+}
+
 function renderTeacherStudentActivity(sessions, windowStart, windowEnd) {
   const wrap = document.getElementById('teacherStudentActivityList');
   if (!wrap) return;
   const windowText = (windowStart && windowEnd)
-    ? `<div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Showing login/logout activity from ${windowStart} to ${windowEnd}</div>`
+    ? `<div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Showing website usage from ${windowStart} to ${windowEnd}</div>`
     : '';
   if (!Array.isArray(sessions) || !sessions.length) {
-    wrap.innerHTML = `${windowText}<div style="color:var(--muted);font-size:0.9rem;">No student activity recorded in this 10 PM to 10 PM window yet.</div>`;
+    wrap.innerHTML = `${windowText}<div style="color:var(--muted);font-size:0.9rem;">No student website usage recorded in this 10 PM to 10 PM window yet.</div>`;
     return;
   }
   wrap.innerHTML = windowText + sessions.map((session) => `
@@ -1779,9 +1788,9 @@ function renderTeacherStudentActivity(sessions, windowStart, windowEnd) {
         <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">Class ${session.studentClass || '?'}${session.studentEmail ? ' - ' + session.studentEmail : ''}</div>
       </div>
       <div style="min-width:260px;text-align:right;">
-        <div style="font-weight:700;color:${session.isOnline ? 'var(--green)' : 'var(--pink)'};">${session.isOnline ? 'Online now' : 'Offline'}</div>
-        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">Logged in: ${session.loginAt || '-'}</div>
-        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">${session.isOnline ? 'Last seen: ' + (session.lastSeenAt || '-') : 'Left at: ' + (session.leftAt || session.lastSeenAt || '-')}</div>
+        <div style="font-weight:700;color:${session.isOnline ? 'var(--green)' : 'var(--blue)'};">Used today: ${formatUsageMinutes(session.usageMinutes)}</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">Latest login: ${session.latestLoginAt || '-'}</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">${session.isOnline ? 'Still active. Last seen: ' + (session.lastSeenAt || '-') : 'Last active: ' + (session.leftAt || session.lastSeenAt || '-')}</div>
       </div>
     </div>
   `).join('');
