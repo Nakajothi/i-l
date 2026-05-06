@@ -472,8 +472,7 @@ async function callGeminiForMcqs(payload) {
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: buildGeminiMcqPrompt(payload) }] }],
             generationConfig: {
-              temperature: 0.8,
-              responseMimeType: 'application/json'
+              temperature: 0.8
             }
           })
         });
@@ -559,8 +558,7 @@ async function callGeminiForWeakTopicTest(payload) {
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: buildWeakTopicMcqPrompt(payload) }] }],
             generationConfig: {
-              temperature: 0.8,
-              responseMimeType: 'application/json'
+              temperature: 0.8
             }
           })
         });
