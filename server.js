@@ -449,46 +449,57 @@ function getGeminiModelSequence() {
     'gemini-2.5-flash-lite-preview-09-2025'
   ].filter(Boolean);
 }
+function getGeminiApiVersionSequence() {
+  const configured = String(process.env.GEMINI_API_VERSION_SEQUENCE || '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (configured.length) return configured;
+  return [
+    String(process.env.GEMINI_API_VERSION || 'v1').trim(),
+    'v1beta'
+  ].filter(Boolean);
+}
 async function callGeminiForMcqs(payload) {
   const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is not configured on the server yet.');
   const models = [...new Set(getGeminiModelSequence())];
+  const apiVersions = [...new Set(getGeminiApiVersionSequence())];
   const errors = [];
-  for (const model of models) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: buildGeminiMcqPrompt(payload) }] }],
-          generationConfig: {
-            temperature: 0.8,
-            responseMimeType: 'application/json'
-          }
-        })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const errorMessage = data?.error?.message || `Gemini request failed for ${model}.`;
-        errors.push(`${model}: ${errorMessage}`);
-        continue;
-      }
-      const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('') || '';
-      const jsonBlock = extractJsonBlock(text);
-      if (!jsonBlock) {
-        errors.push(`${model}: Gemini returned an empty response.`);
-        continue;
-      }
-      let parsed;
+  for (const apiVersion of apiVersions) {
+    for (const model of models) {
       try {
-        parsed = JSON.parse(jsonBlock);
-      } catch {
-        errors.push(`${model}: Gemini returned invalid JSON.`);
-        continue;
+        const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: buildGeminiMcqPrompt(payload) }] }],
+            generationConfig: {
+              temperature: 0.8,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const errorMessage = data?.error?.message || `Gemini request failed for ${model}.`;
+          errors.push(`${apiVersion}/${model}: ${errorMessage}`);
+          continue;
+        }
+        const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('') || '';
+        const jsonBlock = extractJsonBlock(text);
+        if (!jsonBlock) {
+          errors.push(`${apiVersion}/${model}: Gemini returned an empty response.`);
+          continue;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(jsonBlock);
+        } catch {
+          errors.push(`${apiVersion}/${model}: Gemini returned invalid JSON.`);
+          continue;
+        }
+        return { modelUsed: model, apiVersionUsed: apiVersion, parsed };
+      } catch (error) {
+        errors.push(`${apiVersion}/${model}: ${error.message || 'Unknown Gemini error.'}`);
       }
-      return { modelUsed: model, parsed };
-    } catch (error) {
-      errors.push(`${model}: ${error.message || 'Unknown Gemini error.'}`);
     }
   }
   throw new Error(errors.join(' | ') || 'Could not generate MCQs with Gemini.');
@@ -537,41 +548,44 @@ async function callGeminiForWeakTopicTest(payload) {
   const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('Gemini API key is not configured on the server yet.');
   const models = [...new Set(getGeminiModelSequence())];
+  const apiVersions = [...new Set(getGeminiApiVersionSequence())];
   const errors = [];
-  for (const model of models) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: buildWeakTopicMcqPrompt(payload) }] }],
-          generationConfig: {
-            temperature: 0.8,
-            responseMimeType: 'application/json'
-          }
-        })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        errors.push(`${model}: ${data?.error?.message || 'Gemini request failed.'}`);
-        continue;
-      }
-      const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('') || '';
-      const jsonBlock = extractJsonBlock(text);
-      if (!jsonBlock) {
-        errors.push(`${model}: Gemini returned an empty response.`);
-        continue;
-      }
-      let parsed;
+  for (const apiVersion of apiVersions) {
+    for (const model of models) {
       try {
-        parsed = JSON.parse(jsonBlock);
-      } catch {
-        errors.push(`${model}: Gemini returned invalid JSON.`);
-        continue;
+        const response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: buildWeakTopicMcqPrompt(payload) }] }],
+            generationConfig: {
+              temperature: 0.8,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          errors.push(`${apiVersion}/${model}: ${data?.error?.message || 'Gemini request failed.'}`);
+          continue;
+        }
+        const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('') || '';
+        const jsonBlock = extractJsonBlock(text);
+        if (!jsonBlock) {
+          errors.push(`${apiVersion}/${model}: Gemini returned an empty response.`);
+          continue;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(jsonBlock);
+        } catch {
+          errors.push(`${apiVersion}/${model}: Gemini returned invalid JSON.`);
+          continue;
+        }
+        return { modelUsed: model, apiVersionUsed: apiVersion, parsed };
+      } catch (error) {
+        errors.push(`${apiVersion}/${model}: ${error.message || 'Unknown Gemini error.'}`);
       }
-      return { modelUsed: model, parsed };
-    } catch (error) {
-      errors.push(`${model}: ${error.message || 'Unknown Gemini error.'}`);
     }
   }
   throw new Error(errors.join(' | ') || 'Could not generate weak-topic MCQs with Gemini.');
@@ -2158,7 +2172,6 @@ Routes ready:
   GET  /api/health
   `);
 });
-
 
 
 
