@@ -1569,44 +1569,65 @@ app.get('/api/teacher/doubts', authTeacher, (req, res) => {
 
 app.get('/api/teacher/student-activity', authTeacher, (req, res) => {
   const activityWindow = getTeacherActivityWindow();
+  const now = new Date();
   const rows = db.prepare(`
-    SELECT activity.student_id, activity.session_id, activity.login_at, activity.last_seen_at, activity.logout_at,
-           activity.student_name, activity.student_class, activity.student_email,
-           CASE
-             WHEN activity.logout_at IS NULL AND activity.last_seen_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes') THEN 1
-             ELSE 0
-           END AS is_online
-    FROM (
-      SELECT sas.student_id, sas.session_id, sas.login_at, sas.last_seen_at, sas.logout_at,
-             s.name AS student_name, s.class AS student_class, s.email AS student_email,
-             ROW_NUMBER() OVER (PARTITION BY sas.student_id ORDER BY sas.login_at DESC) AS row_num
-      FROM student_activity_sessions sas
-      JOIN students s ON s.id = sas.student_id
-      WHERE COALESCE(s.approval_status, 'accepted') <> 'rejected'
-        AND sas.login_at < ?
-        AND COALESCE(sas.logout_at, sas.last_seen_at, sas.login_at) >= ?
-    ) activity
-    WHERE activity.row_num = 1
-    ORDER BY is_online DESC, activity.last_seen_at DESC, activity.login_at DESC
-    LIMIT 30
+    SELECT sas.student_id, sas.session_id, sas.login_at, sas.last_seen_at, sas.logout_at,
+           s.name AS student_name, s.class AS student_class, s.email AS student_email
+    FROM student_activity_sessions sas
+    JOIN students s ON s.id = sas.student_id
+    WHERE COALESCE(s.approval_status, 'accepted') <> 'rejected'
+      AND sas.login_at < ?
+      AND COALESCE(sas.logout_at, sas.last_seen_at, sas.login_at) >= ?
+    ORDER BY sas.login_at DESC
   `).all(activityWindow.endDb, activityWindow.startDb);
+
+  const sessionMap = new Map();
+  rows.forEach((row) => {
+    const studentId = Number(row.student_id);
+    const loginAt = row.login_at ? new Date(row.login_at) : null;
+    const lastSeenAt = row.last_seen_at ? new Date(row.last_seen_at) : null;
+    const logoutAt = row.logout_at ? new Date(row.logout_at) : null;
+    const isOnline = !logoutAt && lastSeenAt && (now.getTime() - lastSeenAt.getTime()) <= (5 * 60 * 1000);
+    const effectiveEnd = isOnline ? now : (logoutAt || lastSeenAt || loginAt || now);
+    const overlapStart = loginAt && loginAt > activityWindow.startUtc ? loginAt : activityWindow.startUtc;
+    const overlapEnd = effectiveEnd < activityWindow.endUtc ? effectiveEnd : activityWindow.endUtc;
+    const usedMs = Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
+    const current = sessionMap.get(studentId) || {
+      studentId,
+      studentName: row.student_name,
+      studentClass: row.student_class,
+      studentEmail: row.student_email,
+      totalUsageMs: 0,
+      latestLoginAt: null,
+      lastSeenAt: null,
+      leftAt: null,
+      isOnline: false
+    };
+    current.totalUsageMs += usedMs;
+    if (!current.latestLoginAt || (loginAt && loginAt > new Date(current.latestLoginAt))) current.latestLoginAt = row.login_at;
+    if (!current.lastSeenAt || (lastSeenAt && lastSeenAt > new Date(current.lastSeenAt))) current.lastSeenAt = row.last_seen_at;
+    if (!current.leftAt || ((logoutAt || lastSeenAt) && new Date(logoutAt || lastSeenAt) > new Date(current.leftAt))) current.leftAt = row.logout_at || row.last_seen_at;
+    if (isOnline) current.isOnline = true;
+    sessionMap.set(studentId, current);
+  });
+
+  const sessions = Array.from(sessionMap.values())
+    .map((session) => ({
+      ...session,
+      usageMinutes: Math.round(session.totalUsageMs / 60000)
+    }))
+    .sort((a, b) => {
+      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+      return b.usageMinutes - a.usageMinutes;
+    })
+    .slice(0, 30);
+
   res.json({
     windowStart: activityWindow.startUtc.toISOString(),
     windowEnd: activityWindow.endUtc.toISOString(),
     windowStartLabel: formatActivityLabel(activityWindow.startUtc),
     windowEndLabel: formatActivityLabel(activityWindow.endUtc),
-    sessions: rows.map((row) => ({
-      studentId: row.student_id,
-      sessionId: row.session_id,
-      studentName: row.student_name,
-      studentClass: row.student_class,
-      studentEmail: row.student_email,
-      loginAt: row.login_at,
-      lastSeenAt: row.last_seen_at,
-      logoutAt: row.logout_at,
-      isOnline: Number(row.is_online) === 1,
-      leftAt: Number(row.is_online) === 1 ? null : (row.logout_at || row.last_seen_at || null)
-    }))
+    sessions
   });
 });
 
