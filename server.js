@@ -963,7 +963,8 @@ seedDefaultTeacher();
 // ── MIDDLEWARE ───────────────────────────────────────────────
 app.set('trust proxy', 1);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(express.static(__dirname));
 
 const limiter    = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
@@ -2170,6 +2171,7 @@ Routes ready:
   GET  /api/health
   `);
 });
+
 
 
 
