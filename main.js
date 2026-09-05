@@ -1300,7 +1300,7 @@ async function generateTeacherMcqsWithAi() {
     const questions = Array.isArray(data.questions) ? data.questions : [];
     teacherMcqGenerationContext = { title, ...config };
     renderTeacherMcqCards(config.questionCount, questions);
-    const modelName = data.modelUsed ? ` using ${data.modelUsed}` : '';
+    const modelName = data.modelUsed ? ` using ${data.modelUsed}${data.apiVersionUsed ? ' on ' + data.apiVersionUsed : ''}` : '';
     showTeacherMcqMessage(`${questions.length} AI-generated question(s) are ready${modelName}. Review them and click Post MCQ Batch when satisfied.`, false);
   } catch (err) {
     showTeacherMcqMessage(err.message || 'Could not generate MCQs.', true);
@@ -1324,7 +1324,7 @@ async function regenerateTeacherMcqQuestion(cardNumber) {
     });
     fillTeacherMcqCard(cardNumber, data.question || {});
     teacherMcqGenerationContext = { ...config };
-    const modelName = data.modelUsed ? ` using ${data.modelUsed}` : '';
+    const modelName = data.modelUsed ? ` using ${data.modelUsed}${data.apiVersionUsed ? ' on ' + data.apiVersionUsed : ''}` : '';
     showTeacherMcqMessage(`Question ${cardNumber} regenerated${modelName}.`, false);
   } catch (err) {
     showTeacherMcqMessage(err.message || 'Could not regenerate this question.', true);
@@ -1721,32 +1721,40 @@ async function saveTeacherFees() {
 function renderTeacherAttendanceTable(students) {
   const body = document.getElementById('teacherAttendanceBody');
   if (!body) return;
-  if (!students.length) { body.innerHTML = '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students registered yet.</td></tr>'; return; }
-  body.innerHTML = students.map((student) => {
-    const attendance = student.attendance || {};
-    const percentage = Number(attendance.percentage || 0);
-    const currentStatus = student.currentStatus === 'absent' ? 'absent' : 'present';
-    const approvalStatus = student.approvalStatus === 'rejected' ? 'rejected' : 'accepted';
+  if (!students.length) {
+    body.innerHTML = '<div style="padding:18px;color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:18px;">No students registered yet.</div>';
+    return;
+  }
+  const groups = students.reduce((result, student) => {
+    const className = String(student.class || 'Unassigned').trim() || 'Unassigned';
+    (result[className] ||= []).push(student);
+    return result;
+  }, {});
+  body.innerHTML = Object.keys(groups).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).map((className) => {
     return `
-      <tr data-student-id="${student.id}">
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="font-weight:700;">${student.name}</div>
-          <div style="color:var(--muted);font-size:0.85rem;">${student.email || ''}</div>
-        </td>
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Class ${student.class}</td>
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.mobile || 'Not available'}</td>
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${percentage}% <span style="color:var(--muted);">(${attendance.present || 0}/${attendance.total || 0})</span></td>
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
-          <label style="margin-right:12px;cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}> Present</label>
-          <label style="cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}> Absent</label>
-        </td>
-        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
-          <select id="approval-${student.id}" style="min-width:140px;">
-            <option value="accepted" ${approvalStatus === 'accepted' ? 'selected' : ''}>Accept</option>
-            <option value="rejected" ${approvalStatus === 'rejected' ? 'selected' : ''}>Reject</option>
-          </select>
-        </td>
-      </tr>
+      <section class="teacher-attendance-class">
+        <div class="teacher-attendance-class-heading"><h5>Class ${className}</h5><span>${groups[className].length} student(s)</span></div>
+        <div class="teacher-attendance-table-wrap">
+          <table class="teacher-attendance-table">
+            <thead><tr><th>Student</th><th>Mobile</th><th>Attendance %</th><th>Mark for Date</th><th>Access</th></tr></thead>
+            <tbody>${groups[className].map((student) => {
+              const attendance = student.attendance || {};
+              const percentage = Number(attendance.percentage || 0);
+              const currentStatus = student.currentStatus === 'absent' ? 'absent' : 'present';
+              const approvalStatus = student.approvalStatus === 'rejected' ? 'rejected' : 'accepted';
+              return `
+                <tr data-student-id="${student.id}">
+                  <td><strong>${student.name}</strong><div style="color:var(--muted);font-size:0.85rem;">${student.email || ''}</div></td>
+                  <td>${student.mobile || 'Not available'}</td>
+                  <td>${percentage}% <span style="color:var(--muted);">(${attendance.present || 0}/${attendance.total || 0})</span></td>
+                  <td><label><input type="radio" name="attendance-${student.id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}> Present</label> <label><input type="radio" name="attendance-${student.id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}> Absent</label></td>
+                  <td><select id="approval-${student.id}"><option value="accepted" ${approvalStatus === 'accepted' ? 'selected' : ''}>Accept</option><option value="rejected" ${approvalStatus === 'rejected' ? 'selected' : ''}>Reject</option></select></td>
+                </tr>
+              `;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </section>
     `;
   }).join('');
 }
