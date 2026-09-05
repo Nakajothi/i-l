@@ -675,24 +675,9 @@ section{padding:56px 14px;}
           <button class="btn-secondary" onclick="document.getElementById('teacherMcqTitle')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Post MCQ</span></button>
           <button class="btn-secondary" onclick="document.getElementById('teacherPaperTitle')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Add Paper</span></button>
         </div>
-        <div style="margin-top:20px;overflow:auto;border:1px solid rgba(255,255,255,0.08);border-radius:18px;">
-          <table style="width:100%;border-collapse:collapse;min-width:840px;background:rgba(255,255,255,0.02);">
-            <thead>
-              <tr style="background:rgba(255,255,255,0.04);text-align:left;">
-                <th style="padding:14px 12px;">Student</th>
-                <th style="padding:14px 12px;">Class</th>
-                <th style="padding:14px 12px;">Mobile</th>
-                <th style="padding:14px 12px;">Attendance %</th>
-                <th style="padding:14px 12px;">Mark for Date</th>
-                <th style="padding:14px 12px;">Access</th>
-              </tr>
-            </thead>
-            <tbody id="teacherAttendanceBody">
-              <tr><td colspan="6" style="padding:18px;color:var(--muted);">Login as teacher to load registered students.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <div id="teacherAttendanceBody" style="margin-top:20px;display:grid;gap:22px;">
+  <div style="padding:18px;color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:18px;">Login as teacher to load registered students.</div>
+</div>
       <div class="dash-widget" style="grid-column:1 / -1; order:2;">
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
     <div>
