@@ -1718,6 +1718,11 @@ async function saveTeacherFees() {
   }
 }
 
+function getTodayDate() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
 function renderTeacherAttendanceTable(students) {
   const body = document.getElementById('teacherAttendanceBody');
   if (!body) return;
@@ -1732,8 +1737,8 @@ function renderTeacherAttendanceTable(students) {
   }, {});
   body.innerHTML = Object.keys(groups).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).map((className) => {
     return `
-      <section class="teacher-attendance-class">
-        <div class="teacher-attendance-class-heading"><h5>Class ${className}</h5><span>${groups[className].length} student(s)</span></div>
+      <section class="teacher-attendance-class" data-class-key="${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}">
+        <div class="teacher-attendance-class-heading"><div><h5>Class ${className}</h5><span>${groups[className].length} student(s)</span></div><div class="teacher-class-controls"><label>Attendance date<input type="date" id="teacherAttendanceDate-${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}" value="${getTodayDate()}"></label><button class="btn-primary" type="button" onclick="saveTeacherAttendance('${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}')">Save Class Attendance &#8594;</button></div></div>
         <div class="teacher-attendance-table-wrap">
           <table class="teacher-attendance-table">
             <thead><tr><th>Student</th><th>Mobile</th><th>Attendance %</th><th>Mark for Date</th><th>Access</th></tr></thead>
@@ -1942,7 +1947,7 @@ async function answerTeacherDoubt(id) {
 async function loadTeacherAttendance() {
   if (!hasActiveTeacherSession()) return;
   setDefaultTeacherDate();
-  const attendanceDate = document.getElementById('teacherAttendanceDate')?.value || '';
+  const attendanceDate = getTodayDate();
   const weeklyDate = document.getElementById('teacherWeeklyTestDate');
   const feeDate = document.getElementById('teacherFeeDate');
   if (weeklyDate && !weeklyDate.value) weeklyDate.value = attendanceDate;
@@ -1960,11 +1965,12 @@ async function loadTeacherAttendance() {
   }
 }
 
-async function saveTeacherAttendance() {
+async function saveTeacherAttendance(classKey) {
   if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
-  const date = document.getElementById('teacherAttendanceDate')?.value;
-  if (!date) { showTeacherAttendanceMessage('Please choose an attendance date.', true); return; }
-  const rows = Array.from(document.querySelectorAll('#teacherAttendanceBody tr[data-student-id]')).map((row) => {
+  const date = document.getElementById('teacherAttendanceDate-' + classKey)?.value;
+  if (!date) { showTeacherAttendanceMessage('Please choose an attendance date for this class.', true); return; }
+  const section = document.querySelector('.teacher-attendance-class[data-class-key="' + classKey + '"]');
+  const rows = Array.from(section?.querySelectorAll('tr[data-student-id]') || []).map((row) => {
     const studentId = Number(row.dataset.studentId || 0);
     const selected = row.querySelector('input[type="radio"]:checked');
     const approval = row.querySelector('select');
@@ -1972,20 +1978,12 @@ async function saveTeacherAttendance() {
   }).filter(Boolean);
   try {
     const result = await API.saveTeacherAttendance(date, rows);
-    if (Array.isArray(result.students)) {
-      teacherStudentCache = result.students;
-      renderTeacherAttendanceTable(teacherStudentCache);
-      renderTeacherWeeklyTestTable(teacherStudentCache);
-      renderTeacherFeeTable(teacherStudentCache);
-    }
-    showTeacherAttendanceMessage('Attendance saved successfully for ' + date + '.', false);
-    await refreshRoleData();
-    await loadTeacherAttendance();
+    if (Array.isArray(result.students)) teacherStudentCache = result.students;
+    showTeacherAttendanceMessage('Attendance saved for Class ' + classKey.replace(/-/g, ' ') + ' on ' + date + '.', false);
   } catch (err) {
     showTeacherAttendanceMessage(err.message || 'Could not save attendance.', true);
   }
 }
-
 // ── MCQ & PAPERS — STUDENT ────────────────────────────────────────────────────
 async function submitDailyMcqAnswer(mcqId, optionIndex) {
   try {
