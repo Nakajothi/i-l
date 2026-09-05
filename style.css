@@ -496,3 +496,22 @@ footer{background:var(--dark2);border-top:1px solid rgba(255,255,255,0.06);paddi
 
 
 
+
+/* Class-separated teacher attendance sheets */
+.teacher-attendance-class{border:1px solid rgba(31,182,176,.28);border-radius:18px;background:linear-gradient(135deg,rgba(31,182,176,.08),rgba(246,174,45,.04));overflow:hidden;}
+.teacher-attendance-class-heading{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;background:rgba(8,20,23,.42);border-bottom:1px solid rgba(255,255,255,.08);}
+.teacher-attendance-class-heading h5{font-family:'Syne',sans-serif;font-size:1.05rem;color:var(--gold);margin:0;}
+.teacher-attendance-class-heading span{display:block;margin-top:4px;color:var(--muted);font-size:.78rem;}
+.teacher-attendance-table-wrap{overflow:auto;}
+.teacher-attendance-table{width:100%;min-width:760px;border-collapse:collapse;background:rgba(255,255,255,.015);}
+.teacher-attendance-table th{padding:12px;text-align:left;color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;background:rgba(255,255,255,.035);}
+.teacher-attendance-table td{padding:13px 12px;border-top:1px solid rgba(255,255,255,.06);font-size:.86rem;}
+.teacher-attendance-table tr:hover{background:rgba(31,182,176,.055);}
+.teacher-attendance-table input[type=radio]{accent-color:var(--gold);}
+.teacher-attendance-table select{padding:8px 10px;border-radius:9px;}
+
+
+
+
+
+
