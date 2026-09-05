@@ -1300,7 +1300,7 @@ async function generateTeacherMcqsWithAi() {
     const questions = Array.isArray(data.questions) ? data.questions : [];
     teacherMcqGenerationContext = { title, ...config };
     renderTeacherMcqCards(config.questionCount, questions);
-    const modelName = data.modelUsed ? ` using ${data.modelUsed}${data.apiVersionUsed ? ' on ' + data.apiVersionUsed : ''}` : '';
+    const modelName = data.modelUsed ? ` using ${data.modelUsed}` : '';
     showTeacherMcqMessage(`${questions.length} AI-generated question(s) are ready${modelName}. Review them and click Post MCQ Batch when satisfied.`, false);
   } catch (err) {
     showTeacherMcqMessage(err.message || 'Could not generate MCQs.', true);
@@ -1324,7 +1324,7 @@ async function regenerateTeacherMcqQuestion(cardNumber) {
     });
     fillTeacherMcqCard(cardNumber, data.question || {});
     teacherMcqGenerationContext = { ...config };
-    const modelName = data.modelUsed ? ` using ${data.modelUsed}${data.apiVersionUsed ? ' on ' + data.apiVersionUsed : ''}` : '';
+    const modelName = data.modelUsed ? ` using ${data.modelUsed}` : '';
     showTeacherMcqMessage(`Question ${cardNumber} regenerated${modelName}.`, false);
   } catch (err) {
     showTeacherMcqMessage(err.message || 'Could not regenerate this question.', true);
@@ -1718,48 +1718,35 @@ async function saveTeacherFees() {
   }
 }
 
-function getTodayDate() {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
 function renderTeacherAttendanceTable(students) {
   const body = document.getElementById('teacherAttendanceBody');
   if (!body) return;
-  if (!students.length) {
-    body.innerHTML = '<div style="padding:18px;color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:18px;">No students registered yet.</div>';
-    return;
-  }
-  const groups = students.reduce((result, student) => {
-    const className = String(student.class || 'Unassigned').trim() || 'Unassigned';
-    (result[className] ||= []).push(student);
-    return result;
-  }, {});
-  body.innerHTML = Object.keys(groups).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).map((className) => {
+  if (!students.length) { body.innerHTML = '<tr><td colspan="6" style="padding:18px;color:var(--muted);">No students registered yet.</td></tr>'; return; }
+  body.innerHTML = students.map((student) => {
+    const attendance = student.attendance || {};
+    const percentage = Number(attendance.percentage || 0);
+    const currentStatus = student.currentStatus === 'absent' ? 'absent' : 'present';
+    const approvalStatus = student.approvalStatus === 'rejected' ? 'rejected' : 'accepted';
     return `
-      <section class="teacher-attendance-class" data-class-key="${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}">
-        <div class="teacher-attendance-class-heading"><div><h5>Class ${className}</h5><span>${groups[className].length} student(s)</span></div><div class="teacher-class-controls"><label>Attendance date<input type="date" id="teacherAttendanceDate-${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}" value="${getTodayDate()}"></label><button class="btn-primary" type="button" onclick="saveTeacherAttendance('${className.replace(/[^a-z0-9]/gi, '-').toLowerCase()}')">Save Class Attendance &#8594;</button></div></div>
-        <div class="teacher-attendance-table-wrap">
-          <table class="teacher-attendance-table">
-            <thead><tr><th>Student</th><th>Mobile</th><th>Attendance %</th><th>Mark for Date</th><th>Access</th></tr></thead>
-            <tbody>${groups[className].map((student) => {
-              const attendance = student.attendance || {};
-              const percentage = Number(attendance.percentage || 0);
-              const currentStatus = student.currentStatus === 'absent' ? 'absent' : 'present';
-              const approvalStatus = student.approvalStatus === 'rejected' ? 'rejected' : 'accepted';
-              return `
-                <tr data-student-id="${student.id}">
-                  <td><strong>${student.name}</strong><div style="color:var(--muted);font-size:0.85rem;">${student.email || ''}</div></td>
-                  <td>${student.mobile || 'Not available'}</td>
-                  <td>${percentage}% <span style="color:var(--muted);">(${attendance.present || 0}/${attendance.total || 0})</span></td>
-                  <td><label><input type="radio" name="attendance-${student.id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}> Present</label> <label><input type="radio" name="attendance-${student.id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}> Absent</label></td>
-                  <td><select id="approval-${student.id}"><option value="accepted" ${approvalStatus === 'accepted' ? 'selected' : ''}>Accept</option><option value="rejected" ${approvalStatus === 'rejected' ? 'selected' : ''}>Reject</option></select></td>
-                </tr>
-              `;
-            }).join('')}</tbody>
-          </table>
-        </div>
-      </section>
+      <tr data-student-id="${student.id}">
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="font-weight:700;">${student.name}</div>
+          <div style="color:var(--muted);font-size:0.85rem;">${student.email || ''}</div>
+        </td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">Class ${student.class}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${student.mobile || 'Not available'}</td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">${percentage}% <span style="color:var(--muted);">(${attendance.present || 0}/${attendance.total || 0})</span></td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <label style="margin-right:12px;cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}> Present</label>
+          <label style="cursor:pointer;"><input type="radio" name="attendance-${student.id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}> Absent</label>
+        </td>
+        <td style="padding:14px 12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <select id="approval-${student.id}" style="min-width:140px;">
+            <option value="accepted" ${approvalStatus === 'accepted' ? 'selected' : ''}>Accept</option>
+            <option value="rejected" ${approvalStatus === 'rejected' ? 'selected' : ''}>Reject</option>
+          </select>
+        </td>
+      </tr>
     `;
   }).join('');
 }
@@ -1947,7 +1934,7 @@ async function answerTeacherDoubt(id) {
 async function loadTeacherAttendance() {
   if (!hasActiveTeacherSession()) return;
   setDefaultTeacherDate();
-  const attendanceDate = getTodayDate();
+  const attendanceDate = document.getElementById('teacherAttendanceDate')?.value || '';
   const weeklyDate = document.getElementById('teacherWeeklyTestDate');
   const feeDate = document.getElementById('teacherFeeDate');
   if (weeklyDate && !weeklyDate.value) weeklyDate.value = attendanceDate;
@@ -1965,12 +1952,11 @@ async function loadTeacherAttendance() {
   }
 }
 
-async function saveTeacherAttendance(classKey) {
+async function saveTeacherAttendance() {
   if (!hasActiveTeacherSession()) { alert('Please login as teacher first.'); return; }
-  const date = document.getElementById('teacherAttendanceDate-' + classKey)?.value;
-  if (!date) { showTeacherAttendanceMessage('Please choose an attendance date for this class.', true); return; }
-  const section = document.querySelector('.teacher-attendance-class[data-class-key="' + classKey + '"]');
-  const rows = Array.from(section?.querySelectorAll('tr[data-student-id]') || []).map((row) => {
+  const date = document.getElementById('teacherAttendanceDate')?.value;
+  if (!date) { showTeacherAttendanceMessage('Please choose an attendance date.', true); return; }
+  const rows = Array.from(document.querySelectorAll('#teacherAttendanceBody tr[data-student-id]')).map((row) => {
     const studentId = Number(row.dataset.studentId || 0);
     const selected = row.querySelector('input[type="radio"]:checked');
     const approval = row.querySelector('select');
@@ -1978,12 +1964,20 @@ async function saveTeacherAttendance(classKey) {
   }).filter(Boolean);
   try {
     const result = await API.saveTeacherAttendance(date, rows);
-    if (Array.isArray(result.students)) teacherStudentCache = result.students;
-    showTeacherAttendanceMessage('Attendance saved for Class ' + classKey.replace(/-/g, ' ') + ' on ' + date + '.', false);
+    if (Array.isArray(result.students)) {
+      teacherStudentCache = result.students;
+      renderTeacherAttendanceTable(teacherStudentCache);
+      renderTeacherWeeklyTestTable(teacherStudentCache);
+      renderTeacherFeeTable(teacherStudentCache);
+    }
+    showTeacherAttendanceMessage('Attendance saved successfully for ' + date + '.', false);
+    await refreshRoleData();
+    await loadTeacherAttendance();
   } catch (err) {
     showTeacherAttendanceMessage(err.message || 'Could not save attendance.', true);
   }
 }
+
 // ── MCQ & PAPERS — STUDENT ────────────────────────────────────────────────────
 async function submitDailyMcqAnswer(mcqId, optionIndex) {
   try {
@@ -2168,7 +2162,6 @@ document.addEventListener('visibilitychange', () => {
     startStudentActivityHeartbeat();
   }
 });
-
 
 
 
