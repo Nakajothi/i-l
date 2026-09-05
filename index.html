@@ -659,7 +659,14 @@ section{padding:56px 14px;}
           <div>
             <h4>&#128105;&#8205;&#127979; Teacher Dashboard</h4>
               <p style="margin-top:8px;color:var(--muted);font-size:0.92rem;">Mark attendance for all registered students and save it directly to the academy database.</p>
-          </div><div class="teacher-attendance-note">Choose a date and save attendance separately inside each class sheet below.</div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="form-group" style="margin:0;min-width:190px;">
+              <label>Attendance Date</label>
+              <input type="date" id="teacherAttendanceDate" onchange="loadTeacherAttendance()" />
+            </div>
+            <button class="btn-primary" onclick="saveTeacherAttendance()">Save Attendance &#8594;</button>
+          </div>
         </div>
         <div id="teacherAttendanceMessage" style="display:none;margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid rgba(77,158,255,0.25);color:#E8E8F5;"></div>
         <div class="dash-actions teacher-shortcuts" style="margin-top:12px;">
@@ -667,10 +674,10 @@ section{padding:56px 14px;}
           <button class="btn-secondary" onclick="document.getElementById('teacherFeeDate')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Fees</span></button>
           <button class="btn-secondary" onclick="document.getElementById('teacherMcqTitle')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Post MCQ</span></button>
           <button class="btn-secondary" onclick="document.getElementById('teacherPaperTitle')?.scrollIntoView({behavior:'smooth'})"><span class="btn-label">Add Paper</span></button>
-        </div>        <div id="teacherAttendanceBody" style="margin-top:20px;display:grid;gap:22px;">
-          <div style="padding:18px;color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:18px;">Login as teacher to load registered students.</div>
         </div>
-      </div>
+        <div id="teacherAttendanceBody" style="margin-top:20px;display:grid;gap:22px;">
+  <div style="padding:18px;color:var(--muted);border:1px solid rgba(255,255,255,0.08);border-radius:18px;">Login as teacher to load registered students.</div>
+</div>
       <div class="dash-widget" style="grid-column:1 / -1; order:2;">
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
     <div>
